@@ -1,7 +1,7 @@
-
 import os
-exec(open("rama_management.py").read().split("if __name__")[0])
-init_db()
 
-if __name__ == "__main__":
-    app.run()
+with open("rama_management (2).py") as f:
+    code = f.read().split("if __name__")[0]
+    exec(code, globals())
+
+init_db()
