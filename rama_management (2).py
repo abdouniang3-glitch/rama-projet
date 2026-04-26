@@ -703,7 +703,11 @@ def assigner_view():
         id_act    =int(request.form["id_activite"])
         id_agent  =int(request.form["id_assigne_a"])
         # Vérifier relation hiérarchique
-        agent=db.execute("SELECT * FROM utilisateur WHERE id_utilisateur=? AND id_superieur=?",(id_agent,uid)).fetchone()
+      agent=db.execute("""
+    SELECT u.* FROM utilisateur u
+    JOIN utilisateur sup ON sup.id_utilisateur=?
+    WHERE u.id_utilisateur=? AND u.niveau_hierarchique < sup.niveau_hierarchique
+""", (uid, id_agent)).fetchone()
         if not agent:
             flash("Vous ne pouvez assigner qu'à vos agents directs (N).","danger")
             db.close(); return redirect(url_for("assigner_view"))
