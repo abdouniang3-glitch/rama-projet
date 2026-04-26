@@ -711,11 +711,23 @@ def assigner_view():
         if not agent:
             flash("Vous ne pouvez assigner qu'à vos agents directs (N).","danger")
             db.close(); return redirect(url_for("assigner_view"))
-        db.execute("INSERT INTO tache (libelle,type_livrable,description,echeance_prevue,statut,id_activite,id_assigne_par,id_assigne_a) VALUES (?,?,?,'EN_ATTENTE',?,?,?)",(libelle,type_l,desc,ech,id_act,uid,id_agent))
-        nid=db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        db.execute("INSERT INTO historique_tache (id_tache,type_action,id_utilisateur_apres,statut_apres,effectue_par) VALUES (?,'ASSIGNATION_INITIALE',?,'EN_ATTENTE',?)",(nid,id_agent,uid))
-        notifier(db,id_agent,"ASSIGNATION",f"Nouvelle tâche assignée : «{libelle}» — échéance {ech}",nid)
-        db.commit(); db.close()
+       db.execute("""INSERT INTO tache 
+    (libelle, type_livrable, description, date_fin_prevue, statut, activite_id)
+    VALUES (?,?,?,?,'non_demarree',?)""",
+    (libelle, type_l, desc, ech, id_act))
+nid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+db.execute("""INSERT INTO affectation_tache 
+    (tache_id, utilisateur_id, assigne_par_id, statut)
+    VALUES (?,?,?,'active')""",
+    (nid, id_agent, uid))
+aid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+db.execute("""INSERT INTO historique_affectation 
+    (affectation_id, nouvel_utilisateur_id, type_changement, effectue_par_id)
+    VALUES (?,?,'attribution',?)""",
+    (aid, id_agent, uid))
+notifier(db, id_agent, "ASSIGNATION", f"Nouvelle tâche assignée : «{libelle}» — échéance {ech}", nid)
+db.commit()
+db.close()
         flash(f"Tâche «{libelle}» assignée à {agent['prenom']} {agent['nom']}.","success")
         return redirect(url_for("taches_view"))
 
