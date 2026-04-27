@@ -702,31 +702,18 @@ def assigner_view():
         ech       =request.form["echeance_prevue"]
         id_act    =int(request.form["id_activite"])
         id_agent  =int(request.form["id_assigne_a"])
-       # Vérifier relation hiérarchique
-        agent = db.execute("""
-            SELECT u.* FROM utilisateur u
-            JOIN utilisateur sup ON sup.id_utilisateur=?
-            WHERE u.id_utilisateur=? AND u.niveau_hierarchique < sup.niveau_hierarchique
-        """, (uid, id_agent)).fetchone()
+      # Vérifier relation hiérarchique
+        agent = db.execute("SELECT * FROM utilisateur WHERE id_utilisateur=? AND niveau_hierarchique < ?", (id_agent, session["niveau"])).fetchone()
         if not agent:
             flash("Vous ne pouvez assigner qu'à vos agents directs (N).","danger")
             db.close()
             return redirect(url_for("assigner_view"))
-        db.execute("""INSERT INTO tache 
-            (libelle, type_livrable, description, date_fin_prevue, statut, activite_id)
-            VALUES (?,?,?,?,'non_demarree',?)""",
-            (libelle, type_l, desc, ech, id_act))
+        db.execute("INSERT INTO tache (libelle, type_livrable, description, date_fin_prevue, statut, activite_id) VALUES (?,?,?,?,'non_demarree',?)", (libelle, type_l, desc, ech, id_act))
         nid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        db.execute("""INSERT INTO affectation_tache 
-            (tache_id, utilisateur_id, assigne_par_id, statut)
-            VALUES (?,?,?,'active')""",
-            (nid, id_agent, uid))
+        db.execute("INSERT INTO affectation_tache (tache_id, utilisateur_id, assigne_par_id, statut) VALUES (?,?,?,'active')", (nid, id_agent, uid))
         aid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        db.execute("""INSERT INTO historique_affectation 
-            (affectation_id, nouvel_utilisateur_id, type_changement, effectue_par_id)
-            VALUES (?,?,'attribution',?)""",
-            (aid, id_agent, uid))
-        notifier(db, id_agent, "ASSIGNATION", f"Nouvelle tâche assignée : «{libelle}» — échéance {ech}", nid)
+        db.execute("INSERT INTO historique_affectation (affectation_id, nouvel_utilisateur_id, type_changement, effectue_par_id) VALUES (?,?,'attribution',?)", (aid, id_agent, uid))
+        notifier(db, id_agent, "ASSIGNATION", f"Nouvelle tâche : '{libelle}'", nid)
         db.commit()
         db.close()
         flash("Tâche assignée avec succès !","success")
