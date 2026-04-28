@@ -718,11 +718,6 @@ def assigner_view():
         db.close()
         flash("Tâche assignée avec succès !","success")
         return redirect(url_for("assigner_view"))
-    VALUES (?,?,'attribution',?)""",
-    (aid, id_agent, uid))
-notifier(db, id_agent, "ASSIGNATION", f"Nouvelle tâche assignée : «{libelle}» — échéance {ech}", nid)
-db.commit()
-db.close()
         flash(f"Tâche «{libelle}» assignée à {agent['prenom']} {agent['nom']}.","success")
         return redirect(url_for("taches_view"))
 
