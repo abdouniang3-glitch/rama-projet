@@ -27,13 +27,7 @@ import functools
 from db_helper import get_db
 
 # ─────────────────────────────────────────
-# DB HELPERS
-# ─────────────────────────────────────────
-def get_db():
-    db = sqlite3.connect(DB)
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA foreign_keys = ON")
-    return db
+
 
 # ─────────────────────────────────────────
 # HELPERS
@@ -613,7 +607,7 @@ def assigner_tache():
                                statut,id_activite,id_assigne_par,id_assigne_a)
             VALUES (?,?,?,?,'EN_ATTENTE',?,?,?)
         """, (libelle, type_livr, description, echeance, id_activite, uid, id_assigne_a))
-        new_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        new_id = db.execute("SELECT lastval()").fetchone()[0]
 
         db.execute("""INSERT INTO historique_tache
             (id_tache,type_action,id_utilisateur_apres,statut_apres,effectue_par)
