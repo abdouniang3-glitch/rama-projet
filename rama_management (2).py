@@ -15,6 +15,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
 import functools
 from db_helper import get_db
+app = Flask(__name__)
 app.secret_key = "rama_secret_key_2026"
 # ─────────────────────────────────────────
 
@@ -147,6 +148,128 @@ BASE = """<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@600;700&display=swap" rel="stylesheet">
 <style>{css}</style></head>
 <body>{flashes}{body}</body></html>"""
+def init_db():
+    from werkzeug.security import generate_password_hash
+    db = get_db()
+    db.executescript("""
+    CREATE TABLE IF NOT EXISTS service (
+        id_service   SERIAL PRIMARY KEY,
+        libelle      TEXT NOT NULL,
+        description  TEXT
+    );
+    CREATE TABLE IF NOT EXISTS utilisateur (
+        id_utilisateur SERIAL PRIMARY KEY,
+        nom            TEXT NOT NULL,
+        prenom         TEXT NOT NULL,
+        email          TEXT NOT NULL UNIQUE,
+        mot_de_passe   TEXT NOT NULL,
+        role           TEXT NOT NULL,
+        id_superieur   INTEGER REFERENCES utilisateur(id_utilisateur),
+        id_service     INTEGER REFERENCES service(id_service),
+        actif          INTEGER DEFAULT 1
+    );
+    CREATE TABLE IF NOT EXISTS activite (
+        id_activite     SERIAL PRIMARY KEY,
+        titre           TEXT NOT NULL,
+        type            TEXT NOT NULL,
+        description     TEXT,
+        date_debut      TEXT NOT NULL,
+        date_fin_prevue TEXT NOT NULL,
+        date_fin_reelle TEXT,
+        statut          TEXT DEFAULT 'PLANIFIEE',
+        id_service      INTEGER REFERENCES service(id_service),
+        id_createur     INTEGER REFERENCES utilisateur(id_utilisateur)
+    );
+    CREATE TABLE IF NOT EXISTS tache (
+        id_tache         SERIAL PRIMARY KEY,
+        libelle          TEXT NOT NULL,
+        type_livrable    TEXT NOT NULL,
+        description      TEXT,
+        echeance_prevue  TEXT NOT NULL,
+        echeance_reelle  TEXT,
+        statut           TEXT DEFAULT 'EN_ATTENTE',
+        id_activite      INTEGER REFERENCES activite(id_activite),
+        id_assigne_par   INTEGER REFERENCES utilisateur(id_utilisateur),
+        id_assigne_a     INTEGER REFERENCES utilisateur(id_utilisateur),
+        date_assignation TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+    );
+    CREATE TABLE IF NOT EXISTS livrable (
+        id_livrable       SERIAL PRIMARY KEY,
+        id_tache          INTEGER REFERENCES tache(id_tache),
+        fichier_nom       TEXT NOT NULL,
+        commentaire       TEXT,
+        date_soumission   TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'),
+        statut_validation TEXT DEFAULT 'EN_ATTENTE',
+        id_validateur     INTEGER REFERENCES utilisateur(id_utilisateur),
+        date_validation   TEXT,
+        motif_rejet       TEXT
+    );
+    CREATE TABLE IF NOT EXISTS historique_tache (
+        id_historique        SERIAL PRIMARY KEY,
+        id_tache             INTEGER REFERENCES tache(id_tache),
+        type_action          TEXT NOT NULL,
+        id_utilisateur_avant INTEGER,
+        id_utilisateur_apres INTEGER,
+        statut_avant         TEXT,
+        statut_apres         TEXT,
+        motif                TEXT,
+        effectue_par         INTEGER REFERENCES utilisateur(id_utilisateur),
+        date_action          TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+    );
+    CREATE TABLE IF NOT EXISTS notification (
+        id_notification SERIAL PRIMARY KEY,
+        id_destinataire INTEGER REFERENCES utilisateur(id_utilisateur),
+        type            TEXT NOT NULL,
+        message         TEXT NOT NULL,
+        lue             INTEGER DEFAULT 0,
+        date_envoi      TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS'),
+        id_tache        INTEGER REFERENCES tache(id_tache)
+    );
+    CREATE TABLE IF NOT EXISTS idee (
+        id_idee         SERIAL PRIMARY KEY,
+        id_auteur       INTEGER REFERENCES utilisateur(id_utilisateur),
+        titre           TEXT NOT NULL,
+        contenu         TEXT NOT NULL,
+        nb_votes        INTEGER DEFAULT 0,
+        statut          TEXT DEFAULT 'SOUMISE',
+        date_soumission TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+    );
+    CREATE TABLE IF NOT EXISTS avis (
+        id_avis         SERIAL PRIMARY KEY,
+        id_auteur       INTEGER REFERENCES utilisateur(id_utilisateur),
+        type            TEXT NOT NULL,
+        cible           TEXT,
+        contenu         TEXT NOT NULL,
+        statut          TEXT DEFAULT 'SOUMIS',
+        date_soumission TEXT DEFAULT to_char(NOW(), 'YYYY-MM-DD HH24:MI:SS')
+    );
+    """)
+    existing = db.execute("SELECT COUNT(*) FROM utilisateur").fetchone()[0]
+    if existing == 0:
+        db.execute("INSERT INTO service (libelle) VALUES ('Direction administrative')")
+        db.execute("INSERT INTO service (libelle) VALUES ('Direction technique')")
+        db.executemany(
+            "INSERT INTO utilisateur (nom,prenom,email,mot_de_passe,role,id_superieur,id_service) VALUES (?,?,?,?,?,?,?)",
+            [
+                ("DIOP","Amadou","dg@rama.sn",    generate_password_hash("admin"),"DG",          None,None),
+                ("SARR","Fatou", "dir@rama.sn",   generate_password_hash("admin"),"DIRECTEUR",   1,   1),
+                ("FALL","Khady", "chef@rama.sn",  generate_password_hash("admin"),"CHEF_SERVICE",2,   1),
+                ("BA",  "Ibou",  "resp@rama.sn",  generate_password_hash("admin"),"RESPONSABLE", 3,   1),
+                ("KANE","Aissa", "agent@rama.sn", generate_password_hash("admin"),"AGENT",       4,   1),
+                ("NDIAYE","Moussa","agent2@rama.sn",generate_password_hash("admin"),"AGENT",     4,   1),
+                ("SOW","Mariama","agent3@rama.sn",generate_password_hash("admin"),"AGENT",       4,   2),
+            ]
+        )
+        db.executemany(
+            "INSERT INTO activite (titre,type,description,date_debut,date_fin_prevue,statut,id_service,id_createur) VALUES (?,?,?,?,?,?,?,?)",
+            [
+                ("Atelier national RAMA 2026","ATELIER","Atelier annuel","2026-04-01","2026-04-30","EN_COURS",1,2),
+                ("Séminaire de coordination","SEMINAIRE","Séminaire inter-directions","2026-04-15","2026-05-15","PLANIFIEE",1,2),
+                ("Mission terrain nord","MISSION","Mission évaluation","2026-03-20","2026-04-20","EN_COURS",2,3),
+            ]
+        )
+    db.commit()
+    db.close()
 
 def render(title, body, active=""):
     from flask import get_flashed_messages
@@ -345,16 +468,15 @@ def dashboard():
         """, ids+[str(date.today())]).fetchall()
 
     # Productivité top agents
-    top_agents = db.execute("""
+   top_agents = db.execute("""
         SELECT u.nom,u.prenom,
-               COUNT(t.id_tache) total,
-               SUM(t.statut='VALIDE') valides
+               COUNT(t.id_tache) AS total,
+               SUM(CASE WHEN t.statut='VALIDE' THEN 1 ELSE 0 END) AS valides
         FROM utilisateur u
         JOIN tache t ON t.id_assigne_a=u.id_utilisateur
         GROUP BY u.id_utilisateur
         ORDER BY valides DESC LIMIT 4
     """).fetchall()
-
     nb_notif = db.execute("SELECT COUNT(*) FROM notification WHERE id_destinataire=? AND lue=0",(uid,)).fetchone()[0]
     nb_idees = db.execute("SELECT COUNT(*) FROM idee WHERE statut='SOUMISE'").fetchone()[0]
     nb_avis  = db.execute("SELECT COUNT(*) FROM avis WHERE statut='SOUMIS'").fetchone()[0]
@@ -573,32 +695,42 @@ def assigner_view():
     uid=session["user_id"]; sid=session.get("id_service"); role=session["role"]
     db=get_db()
     if request.method=="POST":
-        libelle   =request.form["libelle"].strip()
-        type_l    =request.form["type_livrable"]
-        desc      =request.form.get("description","").strip()
-        ech       =request.form["echeance_prevue"]
-        id_act    =int(request.form["id_activite"])
-        id_agent  =int(request.form["id_assigne_a"])
-      # Vérifier relation hiérarchique
-        niveau_user = session.get("niveau", session.get("niveau_hierarchique", 0)) 
-agent = db.execute("SELECT * FROM utilisateur WHERE id_utilisateur=? AND niveau_hierarchique < ?", (id_agent, niveau_user)).fetchone()
+        libelle  = request.form["libelle"].strip()
+        type_l   = request.form["type_livrable"]
+        desc     = request.form.get("description","").strip()
+        ech      = request.form["echeance_prevue"]
+        id_act   = int(request.form["id_activite"])
+        id_agent = int(request.form["id_assigne_a"])
+ 
+        agent = db.execute(
+            "SELECT * FROM utilisateur WHERE id_utilisateur=? AND id_superieur=?",
+            (id_agent, uid)
+        ).fetchone()
         if not agent:
             flash("Vous ne pouvez assigner qu'à vos agents directs (N).","danger")
             db.close()
             return redirect(url_for("assigner_view"))
-        db.execute("INSERT INTO tache (libelle, type_livrable, description, date_fin_prevue, statut, activite_id) VALUES (?,?,?,?,'non_demarree',?)", (libelle, type_l, desc, ech, id_act))
-       new_id = db.execute("SELECT lastval()").fetchone()[0]
-        db.execute("INSERT INTO affectation_tache (tache_id, utilisateur_id, assigne_par_id, statut) VALUES (?,?,?,'active')", (nid, id_agent, uid))
-        aid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
-        db.execute("INSERT INTO historique_affectation (affectation_id, nouvel_utilisateur_id, type_changement, effectue_par_id) VALUES (?,?,'attribution',?)", (aid, id_agent, uid))
-        notifier(db, id_agent, "ASSIGNATION", f"Nouvelle tâche : '{libelle}'", nid)
+ 
+        cursor = db.execute("""
+            INSERT INTO tache (libelle,type_livrable,description,echeance_prevue,
+                               statut,id_activite,id_assigne_par,id_assigne_a)
+            VALUES (?,?,?,?,'EN_ATTENTE',?,?,?)
+            RETURNING id_tache
+        """, (libelle, type_l, desc, ech, id_act, uid, id_agent))
+        new_id = cursor.fetchone()[0]
+ 
+        db.execute("""INSERT INTO historique_tache
+            (id_tache,type_action,id_utilisateur_apres,statut_apres,effectue_par)
+            VALUES (?,'ASSIGNATION_INITIALE',?,?,?)""",
+            (new_id, id_agent, "EN_ATTENTE", uid))
+ 
+        notifier(db, id_agent, "ASSIGNATION",
+                 f"Nouvelle tâche assignée : « {libelle} » — échéance {ech}", new_id)
         db.commit()
-        db.close()
-        flash("Tâche assignée avec succès !","success")
-        return redirect(url_for("assigner_view"))
         flash(f"Tâche «{libelle}» assignée à {agent['prenom']} {agent['nom']}.","success")
+        db.close()
         return redirect(url_for("taches_view"))
-
+ 
     acts=db.execute("SELECT * FROM activite WHERE id_service=? AND statut IN ('PLANIFIEE','EN_COURS') ORDER BY date_debut DESC",(sid,)).fetchall()
     agents=db.execute("SELECT * FROM utilisateur WHERE id_superieur=? AND actif=1 ORDER BY nom",(uid,)).fetchall()
     db.close()
@@ -957,15 +1089,18 @@ def kpi_global():
     total_ret=sum(x["ret"] for x in svc_data)
     pct_global=round(100*total_val/max(sum(db.execute("SELECT COUNT(*) FROM tache").fetchone()[0] for _ in [1]),1))
 
-    all_agents=db.execute("""
+   all_agents=db.execute("""
         SELECT u.nom,u.prenom,u.role,
-               COUNT(t.id_tache) total, SUM(t.statut='VALIDE') val,
-               SUM(t.statut='EN_RETARD') ret,s.libelle svc
+               COUNT(t.id_tache) AS total,
+               SUM(CASE WHEN t.statut='VALIDE' THEN 1 ELSE 0 END) AS val,
+               SUM(CASE WHEN t.statut='EN_RETARD' THEN 1 ELSE 0 END) AS ret,
+               s.libelle AS svc
         FROM utilisateur u
         LEFT JOIN tache t ON t.id_assigne_a=u.id_utilisateur
         LEFT JOIN service s ON s.id_service=u.id_service
         WHERE u.role IN ('AGENT','RESPONSABLE','CHEF_SERVICE')
-        GROUP BY u.id_utilisateur ORDER BY val DESC LIMIT 8
+        GROUP BY u.id_utilisateur, u.nom, u.prenom, u.role, s.libelle
+        ORDER BY val DESC LIMIT 8
     """).fetchall()
     db.close()
 
