@@ -1,32 +1,24 @@
 # ============================================================
 #  RAMA — Vue Agent (N)
-#  Application Flask complète — Google Colab ready
+#  Application Flask complète
 #  Auteur : Projet L2 Informatique | Prof. Papa DIOP 2025-2026
-# ============================================================
-#
-#  INSTRUCTIONS COLAB :
-#  1. Coller ce fichier dans une cellule
-#  2. Exécuter : !pip install flask flask-login werkzeug
-#  3. Lancer dans une 2e cellule :
-#       from pyngrok import ngrok
-#       !ngrok authtoken VOTRE_TOKEN
-#       public_url = ngrok.connect(5000)
-#       print(public_url)
-#       app.run()
-#
 # ============================================================
 
 from flask import Flask, render_template_string, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
 import functools
+import os
 from db_helper import get_db
+
+# ─────────────────────────────────────────
+# CORRECTION 1 : app doit être créé ICI, avant tout usage
+# ─────────────────────────────────────────
+app = Flask(__name__)
 app.secret_key = "rama_secret_key_2026"
 
 # ─────────────────────────────────────────
-
-# ─────────────────────────────────────────
-# DECORATEUR AUTH
+# DECORATEURS AUTH
 # ─────────────────────────────────────────
 def login_required(f):
     @functools.wraps(f)
@@ -68,7 +60,7 @@ def statut_badge(statut):
     return m.get(statut, ("badge-waiting", statut))
 
 # ─────────────────────────────────────────
-# HTML TEMPLATE (design Sénégal / admin gov)
+# HTML TEMPLATE
 # ─────────────────────────────────────────
 BASE_HTML = """<!DOCTYPE html>
 <html lang="fr">
@@ -96,7 +88,6 @@ BASE_HTML = """<!DOCTYPE html>
 body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
 a { color:inherit; text-decoration:none; }
 
-/* LAYOUT */
 .shell { display:flex; min-height:100vh; }
 .sidebar {
   width:240px; flex-shrink:0; background:var(--brand);
@@ -151,7 +142,6 @@ a { color:inherit; text-decoration:none; }
 .page-title { font-family:'Syne',sans-serif; font-size:18px; font-weight:700; }
 .content { padding:28px 32px; flex:1; }
 
-/* CARDS */
 .card {
   background:var(--surface); border:1px solid var(--border);
   border-radius:var(--radius); padding:20px 24px; margin-bottom:20px;
@@ -166,7 +156,6 @@ a { color:inherit; text-decoration:none; }
 .kpi-val { font-size:26px; font-weight:600; }
 .kpi-sub { font-size:11px; color:var(--muted); margin-top:3px; }
 
-/* BADGES */
 .badge { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:500; padding:3px 10px; border-radius:20px; }
 .badge::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; opacity:.7; }
 .badge-waiting  { background:#F1F5F9; color:#475569; }
@@ -176,14 +165,12 @@ a { color:inherit; text-decoration:none; }
 .badge-reject   { background:#FEF2F2; color:#B91C1C; }
 .badge-late     { background:#FFF7ED; color:#C2410C; }
 
-/* TABLE */
 .tbl { width:100%; border-collapse:collapse; font-size:14px; }
 .tbl th { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:500; padding:10px 12px; border-bottom:2px solid var(--border); text-align:left; }
 .tbl td { padding:12px 12px; border-bottom:1px solid var(--border); vertical-align:middle; }
 .tbl tr:last-child td { border-bottom:none; }
 .tbl tr:hover td { background:#F8FAFC; }
 
-/* FORMS */
 .form-group { margin-bottom:16px; }
 .form-label { display:block; font-size:13px; font-weight:500; margin-bottom:5px; }
 .form-control {
@@ -209,23 +196,15 @@ textarea.form-control { resize:vertical; min-height:80px; }
 .btn-sm { padding:5px 12px; font-size:13px; }
 .btn-danger { background:#FEF2F2; color:var(--danger); border:1px solid #FECACA; }
 
-/* ALERTS */
 .alert { padding:12px 16px; border-radius:8px; font-size:14px; margin-bottom:16px; display:flex; align-items:center; gap:8px; }
 .alert-success { background:#F0FDF4; color:#166534; border:1px solid #BBF7D0; }
 .alert-danger  { background:#FEF2F2; color:#991B1B; border:1px solid #FECACA; }
 .alert-info    { background:#EFF6FF; color:#1E40AF; border:1px solid #BFDBFE; }
 .alert-warning { background:#FFFBEB; color:#92400E; border:1px solid #FDE68A; }
 
-/* GANTT mini */
 .gantt-bar-wrap { height:8px; background:#F1F5F9; border-radius:4px; overflow:hidden; }
 .gantt-bar { height:100%; border-radius:4px; }
 
-/* PROGRESS RING */
-.score-ring { position:relative; display:inline-flex; }
-.score-ring svg { transform:rotate(-90deg); }
-.score-center { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:600; }
-
-/* TIMELINE */
 .timeline { position:relative; padding-left:20px; }
 .timeline::before { content:''; position:absolute; left:6px; top:0; bottom:0; width:1px; background:var(--border); }
 .tl-item { position:relative; padding:0 0 16px 20px; }
@@ -233,13 +212,11 @@ textarea.form-control { resize:vertical; min-height:80px; }
 .tl-date { font-size:11px; color:var(--muted); margin-bottom:3px; }
 .tl-text { font-size:13px; }
 
-/* LOGIN */
 .login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--brand); }
 .login-card { background:var(--surface); border-radius:16px; padding:40px 36px; width:380px; }
 .login-logo { font-family:'Syne',sans-serif; font-size:32px; font-weight:700; color:var(--brand); text-align:center; margin-bottom:4px; }
 .login-sub  { font-size:13px; color:var(--muted); text-align:center; margin-bottom:28px; }
 
-/* UTILS */
 .flex { display:flex; }
 .gap-2 { gap:8px; }
 .gap-3 { gap:12px; }
@@ -316,7 +293,6 @@ SIDEBAR_HTML = """
 # ROUTES
 # ─────────────────────────────────────────
 
-# LOGIN
 LOGIN_TPL = BASE_HTML.replace("{% block body %}{% endblock %}", """
 {% block body %}
 <div class="login-wrap">
@@ -496,13 +472,15 @@ DASHBOARD_CONTENT = """
 </div>
 """
 
+# ─────────────────────────────────────────
 # MES TÂCHES
+# ─────────────────────────────────────────
 @app.route("/taches")
 @login_required
 def mes_taches():
-    uid  = session["user_id"]
+    uid    = session["user_id"]
     filtre = request.args.get("statut", "")
-    db   = get_db()
+    db     = get_db()
     q = """SELECT t.*, a.titre as act_titre, a.type as act_type,
                   u.nom as sup_nom, u.prenom as sup_prenom
            FROM tache t
@@ -574,7 +552,9 @@ TACHES_CONTENT = """
 </div>
 """
 
+# ─────────────────────────────────────────
 # DÉTAIL + MISE À JOUR TÂCHE
+# ─────────────────────────────────────────
 @app.route("/taches/<int:tid>", methods=["GET","POST"])
 @login_required
 def tache_detail(tid):
@@ -609,7 +589,7 @@ def tache_detail(tid):
             flash("Statut mis à jour.", "success")
 
         elif action == "soumettre_livrable":
-            fichier = request.form.get("fichier_nom","").strip()
+            fichier     = request.form.get("fichier_nom","").strip()
             commentaire = request.form.get("commentaire","").strip()
             if fichier:
                 db.execute("""INSERT INTO livrable (id_tache,fichier_nom,commentaire)
@@ -627,7 +607,9 @@ def tache_detail(tid):
         db.close()
         return redirect(url_for("tache_detail", tid=tid))
 
-    livrables = db.execute("SELECT * FROM livrable WHERE id_tache=? ORDER BY date_soumission DESC", (tid,)).fetchall()
+    livrables = db.execute(
+        "SELECT * FROM livrable WHERE id_tache=? ORDER BY date_soumission DESC", (tid,)
+    ).fetchall()
     histo = db.execute("""
         SELECT h.*, u.nom, u.prenom FROM historique_tache h
         LEFT JOIN utilisateur u ON u.id_utilisateur=h.effectue_par
@@ -758,7 +740,9 @@ DETAIL_CONTENT = """
 </div>
 """
 
+# ─────────────────────────────────────────
 # MON HISTORIQUE
+# ─────────────────────────────────────────
 @app.route("/historique")
 @login_required
 def mon_historique():
@@ -805,7 +789,9 @@ HISTO_CONTENT = """
 </div>
 """
 
+# ─────────────────────────────────────────
 # BOÎTE À IDÉES
+# ─────────────────────────────────────────
 @app.route("/idees", methods=["GET","POST"])
 @login_required
 def boite_idees():
@@ -890,7 +876,9 @@ def voter_idee(iid):
     db.close()
     return redirect(url_for("boite_idees"))
 
+# ─────────────────────────────────────────
 # AVIS & SIGNALEMENTS
+# ─────────────────────────────────────────
 @app.route("/avis", methods=["GET","POST"])
 @login_required
 def mes_avis():
@@ -908,7 +896,9 @@ def mes_avis():
         db.close()
         return redirect(url_for("mes_avis"))
 
-    avis = db.execute("SELECT * FROM avis WHERE id_auteur=? ORDER BY date_soumission DESC", (uid,)).fetchall()
+    avis = db.execute(
+        "SELECT * FROM avis WHERE id_auteur=? ORDER BY date_soumission DESC", (uid,)
+    ).fetchall()
     db.close()
 
     tpl = BASE_HTML.replace("{% block title %}{% endblock %}", "Avis & signalements")
@@ -967,14 +957,18 @@ AVIS_CONTENT = """
 </div>
 """
 
-# PROPOSITION À SON N+1 (API JSON simple)
+# ─────────────────────────────────────────
+# API — PROPOSITION AU N+1
+# ─────────────────────────────────────────
 @app.route("/api/proposition", methods=["POST"])
 @login_required
 def soumettre_proposition():
     uid  = session["user_id"]
     data = request.get_json()
     db   = get_db()
-    sup  = db.execute("SELECT id_superieur FROM utilisateur WHERE id_utilisateur=?", (uid,)).fetchone()
+    sup  = db.execute(
+        "SELECT id_superieur FROM utilisateur WHERE id_utilisateur=?", (uid,)
+    ).fetchone()
     if not sup or not sup["id_superieur"]:
         db.close()
         return jsonify({"ok": False, "msg": "Aucun supérieur hiérarchique trouvé."})
@@ -985,3 +979,9 @@ def soumettre_proposition():
     return jsonify({"ok": True, "msg": "Proposition transmise à votre N+1."})
 
 
+# ─────────────────────────────────────────
+# CORRECTION 2 : point d'entrée avec PORT dynamique pour Render
+# ─────────────────────────────────────────
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
