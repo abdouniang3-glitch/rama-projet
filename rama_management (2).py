@@ -13,133 +13,10 @@ from flask import (Flask, render_template_string, request,
                    redirect, url_for, session, flash, jsonify)
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
-import sqlite3, functools
-
-app = Flask(__name__)
+import functools
+from db_helper import get_db
 app.secret_key = "rama_secret_key_2026"
-DB = "rama.db"
-
 # ─────────────────────────────────────────
-# DB
-# ─────────────────────────────────────────
-def get_db():
-    db = sqlite3.connect(DB)
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA foreign_keys = ON")
-    return db
-
-def init_db():
-    db = get_db()
-    db.executescript("""
-    CREATE TABLE IF NOT EXISTS service (
-        id_service   INTEGER PRIMARY KEY AUTOINCREMENT,
-        libelle      TEXT NOT NULL, description TEXT);
-    CREATE TABLE IF NOT EXISTS utilisateur (
-        id_utilisateur INTEGER PRIMARY KEY AUTOINCREMENT,
-        nom TEXT NOT NULL, prenom TEXT NOT NULL,
-        email TEXT NOT NULL UNIQUE, mot_de_passe TEXT NOT NULL,
-        role TEXT NOT NULL, id_superieur INTEGER REFERENCES utilisateur(id_utilisateur),
-        id_service INTEGER REFERENCES service(id_service), actif INTEGER DEFAULT 1);
-    CREATE TABLE IF NOT EXISTS activite (
-        id_activite INTEGER PRIMARY KEY AUTOINCREMENT,
-        titre TEXT NOT NULL, type TEXT NOT NULL, description TEXT,
-        date_debut TEXT NOT NULL, date_fin_prevue TEXT NOT NULL,
-        date_fin_reelle TEXT, statut TEXT DEFAULT 'PLANIFIEE',
-        id_service INTEGER REFERENCES service(id_service),
-        id_createur INTEGER REFERENCES utilisateur(id_utilisateur));
-    CREATE TABLE IF NOT EXISTS tache (
-        id_tache INTEGER PRIMARY KEY AUTOINCREMENT,
-        libelle TEXT NOT NULL, type_livrable TEXT NOT NULL, description TEXT,
-        echeance_prevue TEXT NOT NULL, echeance_reelle TEXT,
-        statut TEXT DEFAULT 'EN_ATTENTE',
-        id_activite INTEGER REFERENCES activite(id_activite),
-        id_assigne_par INTEGER REFERENCES utilisateur(id_utilisateur),
-        id_assigne_a INTEGER REFERENCES utilisateur(id_utilisateur),
-        date_assignation TEXT DEFAULT (datetime('now')));
-    CREATE TABLE IF NOT EXISTS livrable (
-        id_livrable INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_tache INTEGER REFERENCES tache(id_tache),
-        fichier_nom TEXT NOT NULL, commentaire TEXT,
-        date_soumission TEXT DEFAULT (datetime('now')),
-        statut_validation TEXT DEFAULT 'EN_ATTENTE',
-        id_validateur INTEGER REFERENCES utilisateur(id_utilisateur),
-        date_validation TEXT, motif_rejet TEXT);
-    CREATE TABLE IF NOT EXISTS historique_tache (
-        id_historique INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_tache INTEGER REFERENCES tache(id_tache),
-        type_action TEXT NOT NULL,
-        id_utilisateur_avant INTEGER, id_utilisateur_apres INTEGER,
-        statut_avant TEXT, statut_apres TEXT, motif TEXT,
-        effectue_par INTEGER REFERENCES utilisateur(id_utilisateur),
-        date_action TEXT DEFAULT (datetime('now')));
-    CREATE TABLE IF NOT EXISTS notification (
-        id_notification INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_destinataire INTEGER REFERENCES utilisateur(id_utilisateur),
-        type TEXT NOT NULL, message TEXT NOT NULL,
-        lue INTEGER DEFAULT 0, date_envoi TEXT DEFAULT (datetime('now')),
-        id_tache INTEGER REFERENCES tache(id_tache));
-    CREATE TABLE IF NOT EXISTS idee (
-        id_idee INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_auteur INTEGER REFERENCES utilisateur(id_utilisateur),
-        titre TEXT NOT NULL, contenu TEXT NOT NULL,
-        nb_votes INTEGER DEFAULT 0, statut TEXT DEFAULT 'SOUMISE',
-        date_soumission TEXT DEFAULT (datetime('now')));
-    CREATE TABLE IF NOT EXISTS avis (
-        id_avis INTEGER PRIMARY KEY AUTOINCREMENT,
-        id_auteur INTEGER REFERENCES utilisateur(id_utilisateur),
-        type TEXT NOT NULL, cible TEXT, contenu TEXT NOT NULL,
-        statut TEXT DEFAULT 'SOUMIS',
-        date_soumission TEXT DEFAULT (datetime('now')));
-    """)
-    if db.execute("SELECT COUNT(*) FROM utilisateur").fetchone()[0] == 0:
-        db.execute("INSERT INTO service (libelle) VALUES ('Direction administrative')")
-        db.execute("INSERT INTO service (libelle) VALUES ('Direction technique')")
-        db.execute("INSERT INTO service (libelle) VALUES ('Direction financière')")
-        db.executemany(
-            "INSERT INTO utilisateur (nom,prenom,email,mot_de_passe,role,id_superieur,id_service) VALUES (?,?,?,?,?,?,?)",
-            [
-                ("DIOP",  "Amadou",  "dg@rama.sn",     generate_password_hash("admin"),"DG",          None,1),
-                ("SARR",  "Fatou",   "dir@rama.sn",     generate_password_hash("admin"),"DIRECTEUR",   1,   1),
-                ("FALL",  "Khady",   "chef@rama.sn",    generate_password_hash("admin"),"CHEF_SERVICE",2,   1),
-                ("BA",    "Ibou",    "resp@rama.sn",     generate_password_hash("admin"),"RESPONSABLE", 3,   1),
-                ("KANE",  "Aissa",   "agent@rama.sn",   generate_password_hash("admin"),"AGENT",       4,   1),
-                ("NDIAYE","Moussa",  "agent2@rama.sn",  generate_password_hash("admin"),"AGENT",       4,   1),
-                ("SOW",   "Mariama", "agent3@rama.sn",  generate_password_hash("admin"),"AGENT",       4,   2),
-                ("DIALLO","Abdou",   "dir2@rama.sn",    generate_password_hash("admin"),"DIRECTEUR",   1,   2),
-                ("TOURE", "Aminata", "chef2@rama.sn",   generate_password_hash("admin"),"CHEF_SERVICE",8,   2),
-            ]
-        )
-        db.executemany(
-            "INSERT INTO activite (titre,type,description,date_debut,date_fin_prevue,statut,id_service,id_createur) VALUES (?,?,?,?,?,?,?,?)",
-            [
-                ("Atelier national RAMA 2026","ATELIER","Restitution annuelle","2026-04-01","2026-04-30","EN_COURS",1,2),
-                ("Séminaire de coordination", "SEMINAIRE","Inter-directions","2026-04-15","2026-05-15","PLANIFIEE",1,2),
-                ("Mission terrain nord",      "MISSION", "Évaluation régionale","2026-03-20","2026-04-20","EN_COURS",2,8),
-                ("Forum des partenaires",     "FORUM",   "Forum annuel","2026-05-01","2026-05-20","PLANIFIEE",2,8),
-                ("Colloque national",         "COLLOQUE","Colloque inter-agences","2026-06-01","2026-06-15","PLANIFIEE",3,2),
-                ("Salon de l'innovation",     "SALON",   "Salon tech","2026-07-01","2026-07-10","PLANIFIEE",2,8),
-            ]
-        )
-        db.executemany(
-            "INSERT INTO tache (libelle,type_livrable,echeance_prevue,statut,id_activite,id_assigne_par,id_assigne_a) VALUES (?,?,?,?,?,?,?)",
-            [
-                ("Termes de référence",  "TERMES_REFERENCE","2026-04-10","VALIDE",   1,4,5),
-                ("Convocation",          "CONVOCATION",     "2026-04-12","LIVRE",    1,4,5),
-                ("Rapport final",        "RAPPORT",         "2026-04-28","EN_COURS", 1,4,6),
-                ("Fiche technique",      "FICHE_TECHNIQUE", "2026-04-20","EN_RETARD",2,4,5),
-                ("Compte-rendu mission", "COMPTE_RENDU",    "2026-04-18","EN_ATTENTE",3,4,7),
-                ("Rapport évaluation",   "RAPPORT",         "2026-04-25","EN_COURS", 3,4,7),
-                ("Dossier lancement",    "DOSSIER_MARCHE",  "2026-05-05","EN_ATTENTE",4,9,7),
-            ]
-        )
-        db.execute("INSERT INTO livrable (id_tache,fichier_nom,statut_validation) VALUES (1,'tdr_v1.pdf','VALIDE')")
-        db.execute("INSERT INTO livrable (id_tache,fichier_nom,statut_validation) VALUES (2,'convocation.pdf','EN_ATTENTE')")
-        for i in range(3):
-            db.execute("INSERT INTO idee (id_auteur,titre,contenu,nb_votes,statut) VALUES (?,?,?,?,?)",
-                (5+i, f"Idée {i+1} des agents", f"Contenu de l'idée {i+1}", 3+i*2, "SOUMISE"))
-        db.execute("INSERT INTO avis (id_auteur,type,cible,contenu,statut) VALUES (5,'SIGNALEMENT','module_taches','Accès non autorisé détecté','SOUMIS')")
-        db.execute("INSERT INTO avis (id_auteur,type,cible,contenu,statut) VALUES (6,'FONCTIONNALITE','interface','Interface peu intuitive sur mobile','SOUMIS')")
-    db.commit(); db.close()
 
 # ─────────────────────────────────────────
 # HELPERS
@@ -710,7 +587,7 @@ agent = db.execute("SELECT * FROM utilisateur WHERE id_utilisateur=? AND niveau_
             db.close()
             return redirect(url_for("assigner_view"))
         db.execute("INSERT INTO tache (libelle, type_livrable, description, date_fin_prevue, statut, activite_id) VALUES (?,?,?,?,'non_demarree',?)", (libelle, type_l, desc, ech, id_act))
-        nid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+       new_id = db.execute("SELECT lastval()").fetchone()[0]
         db.execute("INSERT INTO affectation_tache (tache_id, utilisateur_id, assigne_par_id, statut) VALUES (?,?,?,'active')", (nid, id_agent, uid))
         aid = db.execute("SELECT last_insert_rowid()").fetchone()[0]
         db.execute("INSERT INTO historique_affectation (affectation_id, nouvel_utilisateur_id, type_changement, effectue_par_id) VALUES (?,?,'attribution',?)", (aid, id_agent, uid))
