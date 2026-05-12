@@ -1,12 +1,6 @@
 # ============================================================
 #  RAMA — Vues Management (Chef de service, Directeur, DG)
-#  Application Flask complète — Google Colab ready
 #  Prof. Papa DIOP | L2 Informatique 2025-2026
-# ============================================================
-#  Comptes démo :
-#    Chef de service : chef@rama.sn  / admin
-#    Directeur       : dir@rama.sn   / admin
-#    DG              : dg@rama.sn    / admin
 # ============================================================
 
 from flask import (Flask, render_template_string, request,
@@ -15,141 +9,14 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, date
 import functools
 from db_helper import get_db
+
 app = Flask(__name__)
 app.secret_key = "rama_secret_key_2026"
-# ─────────────────────────────────────────
 
 # ─────────────────────────────────────────
-# HELPERS
+# INIT BASE DE DONNÉES
 # ─────────────────────────────────────────
-def login_required(f):
-    @functools.wraps(f)
-    def d(*a,**kw):
-        if "user_id" not in session: return redirect(url_for("login"))
-        return f(*a,**kw)
-    return d
-
-def require_roles(*roles):
-    def decorator(f):
-        @functools.wraps(f)
-        def d(*a,**kw):
-            if session.get("role") not in roles:
-                flash("Accès non autorisé pour votre rôle.","danger")
-                return redirect(url_for("dashboard"))
-            return f(*a,**kw)
-        return d
-    return decorator
-
-def ecart(prevue, reelle=None):
-    try:
-        dp = datetime.strptime(prevue,"%Y-%m-%d").date()
-        dr = datetime.strptime(reelle,"%Y-%m-%d").date() if reelle else date.today()
-        return (dr-dp).days
-    except: return None
-
-def badge(st):
-    return {"EN_ATTENTE":("bw","En attente"),"EN_COURS":("bp","En cours"),
-            "LIVRE":("bd","Livré"),"VALIDE":("bv","Validé"),"REJETE":("br","Rejeté"),
-            "EN_RETARD":("bl","En retard"),"PLANIFIEE":("bw","Planifiée"),
-            "ACHEVEE":("bv","Achevée"),"ANNULEE":("br","Annulée")}.get(st,("bw",st))
-
-def notifier(db,dest,typ,msg,id_tache=None):
-    db.execute("INSERT INTO notification (id_destinataire,type,message,id_tache) VALUES (?,?,?,?)",(dest,typ,msg,id_tache))
-
-CSS = """
-:root{--brand:#1B3A6B;--accent:#E8A020;--bg:#EEF2F8;--sf:#FFF;
-  --bd:#DDE3EE;--tx:#18243A;--mu:#637089;
-  --ok:#16A34A;--wn:#D97706;--er:#DC2626;--in:#2563EB;--r:10px;}
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
-a{color:inherit;text-decoration:none}
-.shell{display:flex;min-height:100vh}
-.sb{width:252px;flex-shrink:0;background:var(--brand);display:flex;flex-direction:column;padding-bottom:24px}
-.sb-logo{padding:24px 20px 16px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:10px}
-.sb-logo .app{font-family:'Syne',sans-serif;font-size:21px;color:#fff;letter-spacing:.02em}
-.sb-logo .sub{font-size:11px;color:rgba(255,255,255,.4);margin-top:2px}
-.sb-lbl{font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.1em;padding:8px 14px 4px;text-transform:uppercase}
-.nav{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;margin:0 8px 2px;font-size:14px;color:rgba(255,255,255,.7);cursor:pointer;transition:all .15s}
-.nav:hover{background:rgba(255,255,255,.1);color:#fff}
-.nav.on{background:var(--accent);color:#fff;font-weight:500}
-.ic{width:17px;text-align:center;font-size:13px;flex-shrink:0}
-.sb-badge{background:var(--er);color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;margin-left:auto}
-.sb-role{margin:8px 14px 4px;padding:6px 10px;background:rgba(255,255,255,.08);border-radius:6px;font-size:11px;color:rgba(255,255,255,.6)}
-.sb-user{margin-top:auto;padding:12px 18px;border-top:1px solid rgba(255,255,255,.1)}
-.av{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0}
-.un{font-size:13px;font-weight:500;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ur{font-size:11px;color:rgba(255,255,255,.4)}
-.main{flex:1;display:flex;flex-direction:column;min-width:0}
-.top{background:var(--sf);border-bottom:1px solid var(--bd);padding:0 26px;height:56px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
-.ph{font-family:'Syne',sans-serif;font-size:17px;font-weight:700}
-.ct{padding:22px 26px;flex:1}
-.card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:16px 20px;margin-bottom:16px}
-.ch{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;margin-bottom:12px}
-.kg{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:18px}
-.kp{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:14px 16px}
-.kl{font-size:12px;color:var(--mu);margin-bottom:4px}
-.kv{font-size:24px;font-weight:600}
-.ks{font-size:11px;color:var(--mu);margin-top:3px}
-.bw{background:#F1F5F9;color:#475569}
-.bp{background:#EFF6FF;color:#1D4ED8}
-.bd{background:#FEF9C3;color:#854D0E}
-.bv{background:#F0FDF4;color:#15803D}
-.br{background:#FEF2F2;color:#B91C1C}
-.bl{background:#FFF7ED;color:#C2410C}
-.bg-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:500;padding:3px 9px;border-radius:20px}
-.bg-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.55}
-.tbl{width:100%;border-collapse:collapse;font-size:13px}
-.tbl th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mu);font-weight:500;padding:8px 10px;border-bottom:2px solid var(--bd);text-align:left}
-.tbl td{padding:10px 10px;border-bottom:1px solid var(--bd);vertical-align:middle}
-.tbl tr:last-child td{border-bottom:none}
-.tbl tr:hover td{background:#F8FAFD}
-.fg{margin-bottom:13px}
-.lb{display:block;font-size:13px;font-weight:500;margin-bottom:4px}
-.inp{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:14px;font-family:inherit;background:var(--sf);color:var(--tx);transition:border-color .15s}
-.inp:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(27,58,107,.07)}
-textarea.inp{resize:vertical;min-height:72px}
-.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 15px;border-radius:8px;border:none;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;transition:all .15s}
-.bp-{background:var(--brand);color:#fff}.bp-:hover{background:#152E56}
-.ba{background:var(--accent);color:#fff}.ba:hover{background:#C9871A}
-.bg{background:transparent;border:1px solid var(--bd);color:var(--tx)}.bg:hover{background:var(--bg)}
-.bok{background:#F0FDF4;color:#166534;border:1px solid #BBF7D0}
-.ber{background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA}
-.bsm{padding:4px 10px;font-size:12px}
-.al{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:13px;display:flex;align-items:center;gap:8px}
-.al-ok{background:#F0FDF4;color:#166534;border:1px solid #BBF7D0}
-.al-er{background:#FEF2F2;color:#991B1B;border:1px solid #FECACA}
-.al-in{background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE}
-.al-wn{background:#FFFBEB;color:#92400E;border:1px solid #FDE68A}
-.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
-.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
-.fx{display:flex}.gp2{gap:8px}.gp3{gap:12px}.ai{align-items:center}.jb{justify-content:space-between}
-.mu{color:var(--mu);font-size:13px}.sm{font-size:13px}.fw{font-weight:500}
-.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
-.bw2{height:7px;background:#EEF2F7;border-radius:4px;overflow:hidden}
-.bf{height:100%;border-radius:4px}
-.tl{position:relative;padding-left:16px}
-.tl::before{content:'';position:absolute;left:4px;top:0;bottom:0;width:1px;background:var(--bd)}
-.tl-i{position:relative;padding:0 0 12px 16px}
-.tl-d{position:absolute;left:-6px;top:4px;width:10px;height:10px;border-radius:50%;border:2px solid var(--sf)}
-.tl-t{font-size:11px;color:var(--mu);margin-bottom:2px}
-.gr{display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--bd)}
-.gl{font-size:12px;color:var(--mu);width:130px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gt{flex:1;height:10px;background:#EEF2F7;border-radius:3px;overflow:hidden;position:relative}
-.gb{height:100%;border-radius:3px;position:absolute;top:0}
-.gp{font-size:11px;color:var(--mu);width:32px;text-align:right;flex-shrink:0}
-.sep{border:none;border-top:1px solid var(--bd);margin:12px 0}
-"""
-
-BASE = """<!DOCTYPE html>
-<html lang="fr"><head><meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RAMA — {title}</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@600;700&display=swap" rel="stylesheet">
-<style>{css}</style></head>
-<body>{flashes}{body}</body></html>"""
 def init_db():
-    from werkzeug.security import generate_password_hash
     db = get_db()
     db.executescript("""
     CREATE TABLE IF NOT EXISTS service (
@@ -251,13 +118,13 @@ def init_db():
         db.executemany(
             "INSERT INTO utilisateur (nom,prenom,email,mot_de_passe,role,id_superieur,id_service) VALUES (?,?,?,?,?,?,?)",
             [
-                ("DIOP","Amadou","dg@rama.sn",    generate_password_hash("admin"),"DG",          None,None),
-                ("SARR","Fatou", "dir@rama.sn",   generate_password_hash("admin"),"DIRECTEUR",   1,   1),
-                ("FALL","Khady", "chef@rama.sn",  generate_password_hash("admin"),"CHEF_SERVICE",2,   1),
-                ("BA",  "Ibou",  "resp@rama.sn",  generate_password_hash("admin"),"RESPONSABLE", 3,   1),
-                ("KANE","Aissa", "agent@rama.sn", generate_password_hash("admin"),"AGENT",       4,   1),
-                ("NDIAYE","Moussa","agent2@rama.sn",generate_password_hash("admin"),"AGENT",     4,   1),
-                ("SOW","Mariama","agent3@rama.sn",generate_password_hash("admin"),"AGENT",       4,   2),
+                ("DIOP","Amadou","dg@rama.sn",      generate_password_hash("admin"),"DG",          None,None),
+                ("SARR","Fatou", "dir@rama.sn",      generate_password_hash("admin"),"DIRECTEUR",   1,   1),
+                ("FALL","Khady", "chef@rama.sn",     generate_password_hash("admin"),"CHEF_SERVICE",2,   1),
+                ("BA",  "Ibou",  "resp@rama.sn",     generate_password_hash("admin"),"RESPONSABLE", 3,   1),
+                ("KANE","Aissa", "agent@rama.sn",    generate_password_hash("admin"),"AGENT",       4,   1),
+                ("NDIAYE","Moussa","agent2@rama.sn", generate_password_hash("admin"),"AGENT",       4,   1),
+                ("SOW","Mariama","agent3@rama.sn",   generate_password_hash("admin"),"AGENT",       4,   2),
             ]
         )
         db.executemany(
@@ -268,8 +135,150 @@ def init_db():
                 ("Mission terrain nord","MISSION","Mission évaluation","2026-03-20","2026-04-20","EN_COURS",2,3),
             ]
         )
+        db.executemany(
+            "INSERT INTO tache (libelle,type_livrable,description,echeance_prevue,statut,id_activite,id_assigne_par,id_assigne_a) VALUES (?,?,?,?,?,?,?,?)",
+            [
+                ("Rédiger les termes de référence","TERMES_REFERENCE","Document cadre","2026-04-10","VALIDE",1,4,5),
+                ("Préparer la convocation","CONVOCATION","Invitations","2026-04-12","LIVRE",1,4,5),
+                ("Produire le rapport final","RAPPORT","Restitution","2026-04-28","EN_COURS",1,4,6),
+                ("Rédiger la fiche technique","FICHE_TECHNIQUE","Fiche","2026-04-20","EN_RETARD",2,4,5),
+                ("Préparer le compte-rendu","COMPTE_RENDU","CR mission","2026-04-18","EN_ATTENTE",3,4,7),
+            ]
+        )
     db.commit()
     db.close()
+
+# ─────────────────────────────────────────
+# HELPERS
+# ─────────────────────────────────────────
+def login_required(f):
+    @functools.wraps(f)
+    def d(*a,**kw):
+        if "user_id" not in session: return redirect(url_for("login"))
+        return f(*a,**kw)
+    return d
+
+def require_roles(*roles):
+    def decorator(f):
+        @functools.wraps(f)
+        def d(*a,**kw):
+            if session.get("role") not in roles:
+                flash("Accès non autorisé pour votre rôle.","danger")
+                return redirect(url_for("dashboard"))
+            return f(*a,**kw)
+        return d
+    return decorator
+
+def ecart(prevue, reelle=None):
+    try:
+        dp = datetime.strptime(prevue,"%Y-%m-%d").date()
+        dr = datetime.strptime(reelle,"%Y-%m-%d").date() if reelle else date.today()
+        return (dr-dp).days
+    except:
+        return None
+
+def badge(st):
+    return {"EN_ATTENTE":("bw","En attente"),"EN_COURS":("bp","En cours"),
+            "LIVRE":("bd","Livré"),"VALIDE":("bv","Validé"),"REJETE":("br","Rejeté"),
+            "EN_RETARD":("bl","En retard"),"PLANIFIEE":("bw","Planifiée"),
+            "ACHEVEE":("bv","Achevée"),"ANNULEE":("br","Annulée")}.get(st,("bw",st))
+
+def notifier(db, dest, typ, msg, id_tache=None):
+    db.execute("INSERT INTO notification (id_destinataire,type,message,id_tache) VALUES (?,?,?,?)",
+               (dest, typ, msg, id_tache))
+
+CSS = """
+:root{--brand:#1B3A6B;--accent:#E8A020;--bg:#EEF2F8;--sf:#FFF;
+  --bd:#DDE3EE;--tx:#18243A;--mu:#637089;
+  --ok:#16A34A;--wn:#D97706;--er:#DC2626;--in:#2563EB;--r:10px;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
+a{color:inherit;text-decoration:none}
+.shell{display:flex;min-height:100vh}
+.sb{width:252px;flex-shrink:0;background:var(--brand);display:flex;flex-direction:column;padding-bottom:24px}
+.sb-logo{padding:24px 20px 16px;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:10px}
+.sb-logo .app{font-family:'Syne',sans-serif;font-size:21px;color:#fff;letter-spacing:.02em}
+.sb-logo .sub{font-size:11px;color:rgba(255,255,255,.4);margin-top:2px}
+.sb-lbl{font-size:10px;color:rgba(255,255,255,.3);letter-spacing:.1em;padding:8px 14px 4px;text-transform:uppercase}
+.nav{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;margin:0 8px 2px;font-size:14px;color:rgba(255,255,255,.7);cursor:pointer;transition:all .15s}
+.nav:hover{background:rgba(255,255,255,.1);color:#fff}
+.nav.on{background:var(--accent);color:#fff;font-weight:500}
+.ic{width:17px;text-align:center;font-size:13px;flex-shrink:0}
+.sb-badge{background:var(--er);color:#fff;font-size:10px;font-weight:600;padding:1px 6px;border-radius:10px;margin-left:auto}
+.sb-role{margin:8px 14px 4px;padding:6px 10px;background:rgba(255,255,255,.08);border-radius:6px;font-size:11px;color:rgba(255,255,255,.6)}
+.sb-user{margin-top:auto;padding:12px 18px;border-top:1px solid rgba(255,255,255,.1)}
+.av{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;flex-shrink:0}
+.un{font-size:13px;font-weight:500;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ur{font-size:11px;color:rgba(255,255,255,.4)}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.top{background:var(--sf);border-bottom:1px solid var(--bd);padding:0 26px;height:56px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.ph{font-family:'Syne',sans-serif;font-size:17px;font-weight:700}
+.ct{padding:22px 26px;flex:1}
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:16px 20px;margin-bottom:16px}
+.ch{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;margin-bottom:12px}
+.kg{display:grid;grid-template-columns:repeat(4,1fr);gap:11px;margin-bottom:18px}
+.kp{background:var(--sf);border:1px solid var(--bd);border-radius:var(--r);padding:14px 16px}
+.kl{font-size:12px;color:var(--mu);margin-bottom:4px}
+.kv{font-size:24px;font-weight:600}
+.ks{font-size:11px;color:var(--mu);margin-top:3px}
+.bw{background:#F1F5F9;color:#475569}
+.bp{background:#EFF6FF;color:#1D4ED8}
+.bd{background:#FEF9C3;color:#854D0E}
+.bv{background:#F0FDF4;color:#15803D}
+.br{background:#FEF2F2;color:#B91C1C}
+.bl{background:#FFF7ED;color:#C2410C}
+.bg-badge{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:500;padding:3px 9px;border-radius:20px}
+.bg-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.55}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mu);font-weight:500;padding:8px 10px;border-bottom:2px solid var(--bd);text-align:left}
+.tbl td{padding:10px 10px;border-bottom:1px solid var(--bd);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:#F8FAFD}
+.fg{margin-bottom:13px}
+.lb{display:block;font-size:13px;font-weight:500;margin-bottom:4px}
+.inp{width:100%;padding:8px 10px;border:1px solid var(--bd);border-radius:8px;font-size:14px;font-family:inherit;background:var(--sf);color:var(--tx);transition:border-color .15s}
+.inp:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(27,58,107,.07)}
+textarea.inp{resize:vertical;min-height:72px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 15px;border-radius:8px;border:none;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;transition:all .15s}
+.bp-{background:var(--brand);color:#fff}.bp-:hover{background:#152E56}
+.ba{background:var(--accent);color:#fff}.ba:hover{background:#C9871A}
+.bg{background:transparent;border:1px solid var(--bd);color:var(--tx)}.bg:hover{background:var(--bg)}
+.bok{background:#F0FDF4;color:#166534;border:1px solid #BBF7D0}
+.ber{background:#FEF2F2;color:#B91C1C;border:1px solid #FECACA}
+.bsm{padding:4px 10px;font-size:12px}
+.al{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:13px;display:flex;align-items:center;gap:8px}
+.al-ok{background:#F0FDF4;color:#166534;border:1px solid #BBF7D0}
+.al-er{background:#FEF2F2;color:#991B1B;border:1px solid #FECACA}
+.al-in{background:#EFF6FF;color:#1E40AF;border:1px solid #BFDBFE}
+.al-wn{background:#FFFBEB;color:#92400E;border:1px solid #FDE68A}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.fx{display:flex}.gp2{gap:8px}.gp3{gap:12px}.ai{align-items:center}.jb{justify-content:space-between}
+.mu{color:var(--mu);font-size:13px}.sm{font-size:13px}.fw{font-weight:500}
+.pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:500}
+.bw2{height:7px;background:#EEF2F7;border-radius:4px;overflow:hidden}
+.bf{height:100%;border-radius:4px}
+.tl{position:relative;padding-left:16px}
+.tl::before{content:'';position:absolute;left:4px;top:0;bottom:0;width:1px;background:var(--bd)}
+.tl-i{position:relative;padding:0 0 12px 16px}
+.tl-d{position:absolute;left:-6px;top:4px;width:10px;height:10px;border-radius:50%;border:2px solid var(--sf)}
+.tl-t{font-size:11px;color:var(--mu);margin-bottom:2px}
+.gr{display:flex;align-items:center;gap:8px;padding:4px 0;border-top:1px solid var(--bd)}
+.gl{font-size:12px;color:var(--mu);width:130px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gt{flex:1;height:10px;background:#EEF2F7;border-radius:3px;overflow:hidden;position:relative}
+.gb{height:100%;border-radius:3px;position:absolute;top:0}
+.gp{font-size:11px;color:var(--mu);width:32px;text-align:right;flex-shrink:0}
+.sep{border:none;border-top:1px solid var(--bd);margin:12px 0}
+"""
+
+BASE = """<!DOCTYPE html>
+<html lang="fr"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RAMA — {title}</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=Syne:wght@600;700&display=swap" rel="stylesheet">
+<style>{css}</style></head>
+<body>{flashes}{body}</body></html>"""
 
 def render(title, body, active=""):
     from flask import get_flashed_messages
@@ -293,8 +302,9 @@ def render(title, body, active=""):
 
     role = session.get("role","")
     svc  = session.get("service","")
+    role_labels = {"DG":"Directeur Général","DIRECTEUR":"Directeur","CHEF_SERVICE":"Chef de service"}
+    role_badge_color = {"DG":"#7F77DD","DIRECTEUR":"#185FA5","CHEF_SERVICE":"#0F6E56"}.get(role,"#637089")
 
-    # Navigation selon rôle
     nav_commun = f"""
     <a href="{url_for('dashboard')}" class="nav {'on' if active=='db' else ''}"><span class="ic">&#9632;</span>Tableau de bord</a>
     <a href="{url_for('activites_view')}" class="nav {'on' if active=='act' else ''}"><span class="ic">&#9670;</span>Activités</a>
@@ -312,16 +322,11 @@ def render(title, body, active=""):
     if role in ("DIRECTEUR","DG"):
         nav_dg_plus = f"""
         <a href="{url_for('kpi_global')}" class="nav {'on' if active=='kpi' else ''}"><span class="ic">&#9673;</span>KPIs globaux</a>
-        <a href="{url_for('avis_view')}" class="nav {'on' if active=='av' else ''}"><span class="ic">&#9993;</span>Avis
-        {'<span class="sb-badge">'+str(nb_avis)+'</span>' if nb_avis else ''}</a>
+        <a href="{url_for('avis_view')}" class="nav {'on' if active=='av' else ''}"><span class="ic">&#9993;</span>Avis {'<span class="sb-badge">'+str(nb_avis)+'</span>' if nb_avis else ''}</a>
         <a href="{url_for('idees_view')}" class="nav {'on' if active=='id' else ''}"><span class="ic">&#9728;</span>Boîte à idées</a>"""
 
     nav_notif = f"""
-    <a href="{url_for('notifs_view')}" class="nav {'on' if active=='nt' else ''}"><span class="ic">&#9993;</span>Notifications
-    {'<span class="sb-badge">'+str(nb_notif)+'</span>' if nb_notif else ''}</a>"""
-
-    role_labels = {"DG":"Directeur Général","DIRECTEUR":"Directeur","CHEF_SERVICE":"Chef de service"}
-    role_badge_color = {"DG":"#7F77DD","DIRECTEUR":"#185FA5","CHEF_SERVICE":"#0F6E56"}.get(role,"#637089")
+    <a href="{url_for('notifs_view')}" class="nav {'on' if active=='nt' else ''}"><span class="ic">&#9993;</span>Notifications {'<span class="sb-badge">'+str(nb_notif)+'</span>' if nb_notif else ''}</a>"""
 
     sb = f"""
     <div class="shell">
@@ -396,24 +401,23 @@ def login():
 
 @app.route("/logout")
 def logout():
-    session.clear(); return redirect(url_for("login"))
+    session.clear()
+    return redirect(url_for("login"))
 
 # ─────────────────────────────────────────
-# UTILITAIRES DONNÉES COMMUNES
+# UTILITAIRES
 # ─────────────────────────────────────────
 def get_perimetre(db, uid, role, sid):
-    """Retourne les activités et tâches dans le périmètre du rôle."""
     if role=="CHEF_SERVICE":
         acts=db.execute("SELECT * FROM activite WHERE id_service=? ORDER BY date_debut DESC",(sid,)).fetchall()
     elif role=="DIRECTEUR":
-        # Toutes les activités des services dont il supervise les chefs
         acts=db.execute("""
             SELECT DISTINCT a.* FROM activite a
             JOIN utilisateur u ON u.id_service=a.id_service
             WHERE u.id_superieur=? OR a.id_service=?
             ORDER BY a.date_debut DESC
         """,(uid,sid)).fetchall()
-    else:  # DG
+    else:
         acts=db.execute("SELECT * FROM activite ORDER BY date_debut DESC").fetchall()
     return acts
 
@@ -422,16 +426,16 @@ def kpi_from_acts(db, acts):
     if not ids: return 0,0,0,0,0
     ph = ",".join("?"*len(ids))
     taches=db.execute(f"SELECT * FROM tache WHERE id_activite IN ({ph})",ids).fetchall()
-    total    = len(taches)
-    valides  = sum(1 for t in taches if t["statut"]=="VALIDE")
-    en_cours = sum(1 for t in taches if t["statut"] in ("EN_COURS","EN_ATTENTE"))
-    retards  = sum(1 for t in taches if t["statut"]=="EN_RETARD" or
-                   (t["statut"] not in ("VALIDE","ANNULEE") and t["echeance_prevue"]<str(date.today())))
+    total   = len(taches)
+    valides = sum(1 for t in taches if t["statut"]=="VALIDE")
+    en_cours= sum(1 for t in taches if t["statut"] in ("EN_COURS","EN_ATTENTE"))
+    retards = sum(1 for t in taches if t["statut"]=="EN_RETARD" or
+                  (t["statut"] not in ("VALIDE","ANNULEE") and t["echeance_prevue"]<str(date.today())))
     pct = round(100*valides/max(total,1))
     return total, valides, en_cours, retards, pct
 
 # ─────────────────────────────────────────
-# TABLEAU DE BORD — ADAPTATIF SELON RÔLE
+# TABLEAU DE BORD
 # ─────────────────────────────────────────
 @app.route("/")
 @login_required
@@ -445,13 +449,10 @@ def dashboard():
     total, valides, en_cours, retards, pct = kpi_from_acts(db, acts)
     nb_act = len(acts)
 
-    # Stats types d'activités
     type_counts = {}
     for a in acts:
         type_counts[a["type"]] = type_counts.get(a["type"],0)+1
-    type_dominant = max(type_counts, key=type_counts.get) if type_counts else "—"
 
-    # Retards critiques
     taches_retard = []
     if acts:
         ids = [a["id_activite"] for a in acts]
@@ -467,16 +468,16 @@ def dashboard():
             ORDER BY t.echeance_prevue LIMIT 6
         """, ids+[str(date.today())]).fetchall()
 
-    # Productivité top agents
-   top_agents = db.execute("""
+    top_agents = db.execute("""
         SELECT u.nom,u.prenom,
                COUNT(t.id_tache) AS total,
                SUM(CASE WHEN t.statut='VALIDE' THEN 1 ELSE 0 END) AS valides
         FROM utilisateur u
         JOIN tache t ON t.id_assigne_a=u.id_utilisateur
-        GROUP BY u.id_utilisateur
+        GROUP BY u.id_utilisateur, u.nom, u.prenom
         ORDER BY valides DESC LIMIT 4
     """).fetchall()
+
     nb_notif = db.execute("SELECT COUNT(*) FROM notification WHERE id_destinataire=? AND lue=0",(uid,)).fetchone()[0]
     nb_idees = db.execute("SELECT COUNT(*) FROM idee WHERE statut='SOUMISE'").fetchone()[0]
     nb_avis  = db.execute("SELECT COUNT(*) FROM avis WHERE statut='SOUMIS'").fetchone()[0]
@@ -484,6 +485,7 @@ def dashboard():
 
     role_labels={"DG":"Directeur Général","DIRECTEUR":"Directeur","CHEF_SERVICE":"Chef de service"}
     role_color ={"DG":"#7F77DD","DIRECTEUR":"#185FA5","CHEF_SERVICE":"#0F6E56"}.get(role,"#637089")
+    perim_label = {"DG":"toute la structure","DIRECTEUR":"votre direction","CHEF_SERVICE":"votre service"}.get(role,"votre périmètre")
 
     retard_rows="".join(f"""
     <tr>
@@ -513,8 +515,6 @@ def dashboard():
       </div>
     </div>""" for tp,cnt in sorted(type_counts.items(),key=lambda x:-x[1]))
 
-    perim_label = {"DG":"toute la structure","DIRECTEUR":"votre direction","CHEF_SERVICE":"votre service"}.get(role,"votre périmètre")
-
     body = f"""
     <div class="top">
       <div class="fx ai gp2">
@@ -529,46 +529,30 @@ def dashboard():
     </div>
     <div class="ct">
       <div class="kg">
-        <div class="kp"><div class="kl">Activités</div>
-          <div class="kv" style="color:var(--brand)">{nb_act}</div>
-          <div class="ks">{perim_label}</div></div>
-        <div class="kp"><div class="kl">Taux complétion</div>
-          <div class="kv" style="color:var(--ok)">{pct}%</div>
+        <div class="kp"><div class="kl">Activités</div><div class="kv" style="color:var(--brand)">{nb_act}</div><div class="ks">{perim_label}</div></div>
+        <div class="kp"><div class="kl">Taux complétion</div><div class="kv" style="color:var(--ok)">{pct}%</div>
           <div class="bw2" style="margin-top:6px"><div class="bf" style="width:{pct}%;background:var(--ok)"></div></div></div>
-        <div class="kp"><div class="kl">Tâches en retard</div>
-          <div class="kv" style="color:var(--er)">{retards}</div>
-          <div class="ks">à traiter en priorité</div></div>
-        <div class="kp"><div class="kl">Idées / Avis</div>
-          <div class="kv" style="color:var(--wn)">{nb_idees}</div>
-          <div class="ks">{nb_avis} signalements</div></div>
+        <div class="kp"><div class="kl">Tâches en retard</div><div class="kv" style="color:var(--er)">{retards}</div><div class="ks">à traiter en priorité</div></div>
+        <div class="kp"><div class="kl">Idées / Avis</div><div class="kv" style="color:var(--wn)">{nb_idees}</div><div class="ks">{nb_avis} signalements</div></div>
       </div>
-
       <div class="g2" style="gap:16px">
         <div class="card">
-          <div class="ch fx ai jb" style="margin-bottom:12px">
-            <span>Retards actifs</span>
-            <a href="/taches?statut=EN_RETARD" class="btn bg bsm">Tous</a>
-          </div>
+          <div class="ch fx ai jb" style="margin-bottom:12px"><span>Retards actifs</span>
+            <a href="/taches?statut=EN_RETARD" class="btn bg bsm">Tous</a></div>
           <table class="tbl">
             <thead><tr><th>Tâche</th><th>Activité</th><th>Service</th><th>Agent</th><th>Retard</th><th>Statut</th></tr></thead>
             <tbody>{retard_rows or '<tr><td colspan="6" style="text-align:center;color:var(--mu);padding:18px">Aucun retard.</td></tr>'}</tbody>
           </table>
         </div>
         <div>
+          <div class="card"><div class="ch">Types d'activités</div>{act_type_html or '<div class="mu sm">Aucune activité.</div>'}</div>
           <div class="card">
-            <div class="ch">Types d'activités</div>
-            {act_type_html or '<div class="mu sm">Aucune activité.</div>'}
-          </div>
-          <div class="card">
-            <div class="ch fx ai jb" style="margin-bottom:12px">
-              <span>Top productivité</span>
-              <a href="/productivite" class="btn bg bsm">Détail</a>
-            </div>
+            <div class="ch fx ai jb" style="margin-bottom:12px"><span>Top productivité</span>
+              <a href="/productivite" class="btn bg bsm">Détail</a></div>
             {agent_rows or '<div class="mu sm">Aucune donnée.</div>'}
           </div>
         </div>
       </div>
-
       <div class="card">
         <div class="ch" style="margin-bottom:10px">Actions rapides</div>
         <div class="fx gp2" style="flex-wrap:wrap">
@@ -583,7 +567,6 @@ def dashboard():
     </div>"""
     return render("Tableau de bord", body, active="db")
 
-
 # ─────────────────────────────────────────
 # ACTIVITÉS
 # ─────────────────────────────────────────
@@ -595,7 +578,6 @@ def activites_view():
     acts=get_perimetre(db,uid,role,sid)
     rows=""
     for a in acts:
-        ids=[a["id_activite"]]
         _,val,_,ret,pct=kpi_from_acts(db,[a])
         nb=db.execute("SELECT COUNT(*) FROM tache WHERE id_activite=?",(a["id_activite"],)).fetchone()[0]
         b=badge(a["statut"])
@@ -604,12 +586,8 @@ def activites_view():
           <td><span class="pill" style="background:#EFF6FF;color:#1E40AF;font-size:11px">{a['type']}</span></td>
           <td class="mu sm">{a['date_debut']}</td>
           <td class="mu sm">{a['date_fin_prevue']}</td>
-          <td>
-            <div class="fx ai gp2">
-              <div class="bw2" style="width:70px"><div class="bf" style="width:{pct}%;background:var(--brand)"></div></div>
-              <span class="mu" style="font-size:11px">{pct}%</span>
-            </div>
-          </td>
+          <td><div class="fx ai gp2"><div class="bw2" style="width:70px"><div class="bf" style="width:{pct}%;background:var(--brand)"></div></div>
+            <span class="mu" style="font-size:11px">{pct}%</span></div></td>
           <td>{nb} tâches <span style="color:var(--er);font-size:11px">· {ret} retard(s)</span></td>
           <td><span class="bg-badge {b[0]}">{b[1]}</span></td>
           <td><a href="/activites/{a['id_activite']}" class="btn bg bsm">Voir</a></td>
@@ -632,7 +610,8 @@ def activites_view():
 def activite_detail(aid):
     db=get_db()
     a=db.execute("SELECT a.*,s.libelle svc FROM activite a JOIN service s ON s.id_service=a.id_service WHERE a.id_activite=?",(aid,)).fetchone()
-    if not a: db.close(); flash("Introuvable.","danger"); return redirect(url_for("activites_view"))
+    if not a:
+        db.close(); flash("Introuvable.","danger"); return redirect(url_for("activites_view"))
     taches=db.execute("""
         SELECT t.*,u.nom an,u.prenom ap,up.nom pn,up.prenom pp
         FROM tache t
@@ -655,38 +634,31 @@ def activite_detail(aid):
     </tr>""" for t in taches)
     body=f"""
     <div class="top">
-      <div class="fx ai gp2">
-        <a href="/activites" class="btn bg bsm">&larr;</a>
+      <div class="fx ai gp2"><a href="/activites" class="btn bg bsm">&larr;</a>
         <div class="ph">{a['titre']}</div>
-        <span class="pill" style="background:#EFF6FF;color:#1E40AF">{a['type']}</span>
-      </div>
+        <span class="pill" style="background:#EFF6FF;color:#1E40AF">{a['type']}</span></div>
       <span class="bg-badge {b[0]}">{b[1]}</span>
     </div>
     <div class="ct">
       <div class="g3" style="margin-bottom:16px">
         <div class="kp"><div class="kl">Tâches</div><div class="kv">{nb}</div></div>
         <div class="kp"><div class="kl">Validées</div><div class="kv" style="color:var(--ok)">{val}</div></div>
-        <div class="kp"><div class="kl">Avancement</div>
-          <div class="kv" style="color:var(--brand)">{pct}%</div>
-          <div class="bw2" style="margin-top:6px"><div class="bf" style="width:{pct}%;background:var(--brand)"></div></div>
-        </div>
+        <div class="kp"><div class="kl">Avancement</div><div class="kv" style="color:var(--brand)">{pct}%</div>
+          <div class="bw2" style="margin-top:6px"><div class="bf" style="width:{pct}%;background:var(--brand)"></div></div></div>
       </div>
       <div class="card">
-        <div class="ch fx ai jb" style="margin-bottom:12px">
-          <span>Tâches</span>
-          <a href="/assigner?activite={aid}" class="btn ba bsm">&#43; Assigner</a>
-        </div>
+        <div class="ch fx ai jb" style="margin-bottom:12px"><span>Tâches</span>
+          <a href="/assigner?activite={aid}" class="btn ba bsm">&#43; Assigner</a></div>
         <table class="tbl">
           <thead><tr><th>Libellé</th><th>Livrable</th><th>Agent</th><th>Assignée par</th><th>Échéance</th><th>Statut</th><th></th></tr></thead>
           <tbody>{rows or '<tr><td colspan="7" style="text-align:center;color:var(--mu);padding:18px">Aucune tâche.</td></tr>'}</tbody>
         </table>
       </div>
     </div>"""
-    return render(f"Activité",body,active="act")
-
+    return render("Activité",body,active="act")
 
 # ─────────────────────────────────────────
-# ASSIGNER UNE TÂCHE (Chef de service + Directeur)
+# ASSIGNER UNE TÂCHE
 # ─────────────────────────────────────────
 @app.route("/assigner", methods=["GET","POST"])
 @login_required
@@ -701,7 +673,7 @@ def assigner_view():
         ech      = request.form["echeance_prevue"]
         id_act   = int(request.form["id_activite"])
         id_agent = int(request.form["id_assigne_a"])
- 
+
         agent = db.execute(
             "SELECT * FROM utilisateur WHERE id_utilisateur=? AND id_superieur=?",
             (id_agent, uid)
@@ -710,7 +682,7 @@ def assigner_view():
             flash("Vous ne pouvez assigner qu'à vos agents directs (N).","danger")
             db.close()
             return redirect(url_for("assigner_view"))
- 
+
         cursor = db.execute("""
             INSERT INTO tache (libelle,type_livrable,description,echeance_prevue,
                                statut,id_activite,id_assigne_par,id_assigne_a)
@@ -718,19 +690,19 @@ def assigner_view():
             RETURNING id_tache
         """, (libelle, type_l, desc, ech, id_act, uid, id_agent))
         new_id = cursor.fetchone()[0]
- 
+
         db.execute("""INSERT INTO historique_tache
             (id_tache,type_action,id_utilisateur_apres,statut_apres,effectue_par)
             VALUES (?,'ASSIGNATION_INITIALE',?,?,?)""",
             (new_id, id_agent, "EN_ATTENTE", uid))
- 
+
         notifier(db, id_agent, "ASSIGNATION",
                  f"Nouvelle tâche assignée : « {libelle} » — échéance {ech}", new_id)
         db.commit()
         flash(f"Tâche «{libelle}» assignée à {agent['prenom']} {agent['nom']}.","success")
         db.close()
         return redirect(url_for("taches_view"))
- 
+
     acts=db.execute("SELECT * FROM activite WHERE id_service=? AND statut IN ('PLANIFIEE','EN_COURS') ORDER BY date_debut DESC",(sid,)).fetchall()
     agents=db.execute("SELECT * FROM utilisateur WHERE id_superieur=? AND actif=1 ORDER BY nom",(uid,)).fetchall()
     db.close()
@@ -742,12 +714,12 @@ def assigner_view():
     <div class="top"><div class="ph">Assigner une tâche</div></div>
     <div class="ct"><div style="max-width:540px"><div class="card">
       <div class="ch">Nouvelle tâche — règle N+1 → N</div>
-      <div class="al al-in" style="margin-bottom:14px;font-size:13px">Seuls vos agents directs apparaissent. La règle hiérarchique est vérifiée automatiquement.</div>
+      <div class="al al-in" style="margin-bottom:14px;font-size:13px">Seuls vos agents directs apparaissent.</div>
       <form method="POST">
         <div class="fg"><label class="lb">Activité *</label><select name="id_activite" class="inp" required>{opts_a}</select></div>
-        <div class="fg"><label class="lb">Libellé *</label><input type="text" name="libelle" class="inp" placeholder="Ex : Rédiger les termes de référence" required></div>
+        <div class="fg"><label class="lb">Libellé *</label><input type="text" name="libelle" class="inp" required></div>
         <div class="fg"><label class="lb">Type de livrable *</label><select name="type_livrable" class="inp" required>{livr_opts}</select></div>
-        <div class="fg"><label class="lb">Description / consignes</label><textarea name="description" class="inp" rows="3"></textarea></div>
+        <div class="fg"><label class="lb">Description</label><textarea name="description" class="inp" rows="3"></textarea></div>
         <div class="g2">
           <div class="fg"><label class="lb">Échéance *</label><input type="date" name="echeance_prevue" class="inp" required></div>
           <div class="fg"><label class="lb">Assigner à *</label><select name="id_assigne_a" class="inp" required>{opts_u}</select></div>
@@ -757,7 +729,6 @@ def assigner_view():
       </form>
     </div></div></div>"""
     return render("Assigner",body,active="asg")
-
 
 # ─────────────────────────────────────────
 # SUIVI TÂCHES
@@ -781,7 +752,9 @@ def taches_view():
               JOIN service s ON s.id_service=a.id_service
               WHERE t.id_activite IN ({ph})"""
         params=list(ids)
-        if filtre: q+=" AND t.statut=?"; params.append(filtre)
+        if filtre:
+            q+=" AND t.statut=?"
+            params.append(filtre)
         q+=" ORDER BY t.echeance_prevue ASC"
         taches=db.execute(q,params).fetchall()
         rows_html="".join(f"""<tr>
@@ -800,9 +773,7 @@ def taches_view():
     f_tabs="".join(f'<a href="/taches?statut={s}" class="btn bsm {"bp-" if filtre==s else "bg"}">{l}</a>'
         for s,l in [("","Toutes"),("EN_ATTENTE","Attente"),("EN_COURS","En cours"),("EN_RETARD","Retard"),("LIVRE","Livrés"),("VALIDE","Validés")])
     body=f"""
-    <div class="top"><div class="ph">Suivi des tâches</div>
-      <div class="fx gp2">{f_tabs}</div>
-    </div>
+    <div class="top"><div class="ph">Suivi des tâches</div><div class="fx gp2">{f_tabs}</div></div>
     <div class="ct"><div class="card">
       <table class="tbl">
         <thead><tr><th>Tâche</th><th>Activité</th><th>Service</th><th>Agent</th><th>Assignée par</th><th>Échéance</th><th>Statut</th><th></th></tr></thead>
@@ -820,7 +791,8 @@ def tache_detail(tid):
         JOIN utilisateur up ON up.id_utilisateur=t.id_assigne_par
         JOIN activite a ON a.id_activite=t.id_activite
         WHERE t.id_tache=?""",(tid,)).fetchone()
-    if not t: db.close(); flash("Introuvable.","danger"); return redirect(url_for("taches_view"))
+    if not t:
+        db.close(); flash("Introuvable.","danger"); return redirect(url_for("taches_view"))
     livs=db.execute("SELECT * FROM livrable WHERE id_tache=? ORDER BY date_soumission DESC",(tid,)).fetchall()
     histo=db.execute("""SELECT h.*,uc.nom en,uc.prenom ep FROM historique_tache h
         LEFT JOIN utilisateur uc ON uc.id_utilisateur=h.effectue_par
@@ -833,10 +805,10 @@ def tache_detail(tid):
         l=f"+{e}j retard" if e>0 else (f"{abs(e)}j avant" if e<0 else "Dans les temps")
         ec_html=f'<span style="color:{c}">{l}</span>'
     livs_html="".join(f"""<div style="padding:9px 0;border-top:1px solid var(--bd)">
-      <div class="fx ai jb"><div class="fw sm">{l['fichier_nom']}</div>
-      <span class="bg-badge {badge(l['statut_validation'])[0]}">{badge(l['statut_validation'])[1]}</span></div>
-      <div class="mu" style="font-size:11px">{l['date_soumission'][:16]}</div>
-    </div>""" for l in livs)
+      <div class="fx ai jb"><div class="fw sm">{lv['fichier_nom']}</div>
+      <span class="bg-badge {badge(lv['statut_validation'])[0]}">{badge(lv['statut_validation'])[1]}</span></div>
+      <div class="mu" style="font-size:11px">{lv['date_soumission'][:16]}</div>
+    </div>""" for lv in livs)
     tl_html="".join(f"""<div class="tl-i">
       <div class="tl-d" style="background:var(--brand)"></div>
       <div class="tl-t mu">{h['date_action'][:16]} — {h['ep'] or ''} {h['en'] or ''}</div>
@@ -846,8 +818,7 @@ def tache_detail(tid):
     b=badge(t["statut"])
     body=f"""
     <div class="top">
-      <div class="fx ai gp2"><a href="/taches" class="btn bg bsm">&larr;</a>
-        <div class="ph">{t['libelle']}</div></div>
+      <div class="fx ai gp2"><a href="/taches" class="btn bg bsm">&larr;</a><div class="ph">{t['libelle']}</div></div>
       <span class="bg-badge {b[0]}">{b[1]}</span>
     </div>
     <div class="ct"><div class="g2" style="gap:16px">
@@ -863,16 +834,13 @@ def tache_detail(tid):
             <tr><td class="mu" style="padding:4px 0">Écart</td><td>{ec_html or '—'}</td></tr>
           </table>
         </div>
-        <div class="card"><div class="ch">Livrables</div>
-          {livs_html or '<div class="mu sm">Aucun livrable.</div>'}
-        </div>
+        <div class="card"><div class="ch">Livrables</div>{livs_html or '<div class="mu sm">Aucun livrable.</div>'}</div>
       </div>
       <div class="card"><div class="ch">Historique</div>
         <div class="tl">{tl_html or '<div class="mu sm">Aucune action.</div>'}</div>
       </div>
     </div></div>"""
     return render("Tâche",body,active="tch")
-
 
 # ─────────────────────────────────────────
 # GANTT
@@ -891,8 +859,7 @@ def gantt_view():
         if not taches: continue
         nb=len(taches); val=sum(1 for t in taches if t["statut"]=="VALIDE")
         pct=round(100*val/max(nb,1))
-        gantt_html+=f"""
-        <div style="margin-bottom:18px">
+        gantt_html+=f"""<div style="margin-bottom:18px">
           <div class="fx ai jb" style="margin-bottom:8px">
             <div class="fw sm">{a['titre']} <span class="pill" style="background:#EFF6FF;color:#1E40AF;margin-left:4px">{a['type']}</span></div>
             <div class="fx ai gp2">
@@ -905,17 +872,18 @@ def gantt_view():
             d0=datetime.strptime(a["date_debut"],"%Y-%m-%d").date()
             d1=datetime.strptime(a["date_fin_prevue"],"%Y-%m-%d").date()
             span=max((d1-d0).days,1)
-        except: d0=date.today(); span=30
+        except:
+            d0=date.today(); span=30
         for t in taches:
             try:
                 dt=datetime.strptime(t["echeance_prevue"],"%Y-%m-%d").date()
                 off=max((dt-d0).days,0)
                 lp=min(round(100*off/span),92)
                 wp=max(round(300/span),5)
-            except: lp,wp=0,10
+            except:
+                lp,wp=0,10
             bc={"VALIDE":"var(--ok)","EN_RETARD":"var(--er)","LIVRE":"var(--wn)"}.get(t["statut"],"var(--brand)")
-            gantt_html+=f"""
-            <div class="gr">
+            gantt_html+=f"""<div class="gr">
               <div class="gl" title="{t['libelle']}">{t['libelle'][:20]}{'…' if len(t['libelle'])>20 else ''}</div>
               <div class="gt" style="height:14px">
                 <div class="gb" style="left:{lp}%;width:{wp}%;background:{bc}"></div>
@@ -928,14 +896,9 @@ def gantt_view():
     legende="".join(f'<span class="fx ai gp2" style="font-size:12px"><span style="width:10px;height:7px;background:{c};border-radius:2px;display:inline-block"></span>{l}</span>'
         for c,l in [("var(--brand)","En cours"),("var(--ok)","Validé"),("var(--er)","En retard"),("var(--wn)","Livré")])
     body=f"""
-    <div class="top"><div class="ph">Diagramme de Gantt</div>
-      <div class="fx ai gp2">{legende}</div>
-    </div>
-    <div class="ct"><div class="card">
-      {gantt_html or '<div class="mu sm">Aucune activité à afficher.</div>'}
-    </div></div>"""
+    <div class="top"><div class="ph">Diagramme de Gantt</div><div class="fx ai gp2">{legende}</div></div>
+    <div class="ct"><div class="card">{gantt_html or '<div class="mu sm">Aucune activité.</div>'}</div></div>"""
     return render("Gantt",body,active="gnt")
-
 
 # ─────────────────────────────────────────
 # PRODUCTIVITÉ
@@ -946,7 +909,7 @@ def perf_view():
     uid=session["user_id"]; role=session["role"]; sid=session.get("id_service")
     db=get_db()
     if role=="CHEF_SERVICE":
-        agents=db.execute("SELECT u.* FROM utilisateur u JOIN activite a ON a.id_service=? WHERE u.id_service=? AND u.role='AGENT' GROUP BY u.id_utilisateur",(sid,sid)).fetchall()
+        agents=db.execute("SELECT u.* FROM utilisateur u WHERE u.id_service=? AND u.role='AGENT' AND u.actif=1",(sid,)).fetchall()
     elif role=="DIRECTEUR":
         agents=db.execute("SELECT * FROM utilisateur WHERE id_service=? AND role IN ('AGENT','RESPONSABLE') AND actif=1",(sid,)).fetchall()
     else:
@@ -967,13 +930,11 @@ def perf_view():
         ag=s["ag"]
         sc=s["score"]
         cc="var(--ok)" if sc>=80 else ("var(--wn)" if sc>=50 else "var(--er)")
-        cards+=f"""
-        <div class="card" style="margin-bottom:12px">
+        cards+=f"""<div class="card" style="margin-bottom:12px">
           <div class="fx ai jb" style="margin-bottom:10px">
             <div class="fx ai gp2">
               <div class="av" style="width:32px;height:32px;font-size:11px;background:var(--brand)">{ag['prenom'][0]}{ag['nom'][0]}</div>
-              <div><div class="fw sm">{ag['prenom']} {ag['nom']}</div>
-                <div class="mu" style="font-size:11px">{ag['role']}</div></div>
+              <div><div class="fw sm">{ag['prenom']} {ag['nom']}</div><div class="mu" style="font-size:11px">{ag['role']}</div></div>
             </div>
             <div style="font-size:20px;font-weight:600;color:{cc}">{sc}%</div>
           </div>
@@ -988,7 +949,6 @@ def perf_view():
     <div class="top"><div class="ph">Productivité des intervenants</div></div>
     <div class="ct"><div style="max-width:640px">{cards or '<div class="card mu sm">Aucun agent.</div>'}</div></div>"""
     return render("Productivité",body,active="prf")
-
 
 # ─────────────────────────────────────────
 # ÉCARTS DÉLAIS
@@ -1013,20 +973,14 @@ def ecarts_view():
         """,ids).fetchall()
     db.close()
     dans=[t for t in taches if t["statut"]=="VALIDE" and t["echeance_reelle"] and t["echeance_reelle"]<=t["echeance_prevue"]]
-    leger=[t for t in taches if t["echeance_reelle"] and t["echeance_reelle"]>t["echeance_prevue"] and ecart(t["echeance_prevue"],t["echeance_reelle"])<4]
-    crit =[t for t in taches if t["echeance_reelle"] and ecart(t["echeance_prevue"],t["echeance_reelle"])>=4]
+    leger=[t for t in taches if t["echeance_reelle"] and t["echeance_reelle"]>t["echeance_prevue"] and ecart(t["echeance_prevue"],t["echeance_reelle"]) is not None and ecart(t["echeance_prevue"],t["echeance_reelle"])<4]
+    crit =[t for t in taches if t["echeance_reelle"] and ecart(t["echeance_prevue"],t["echeance_reelle"]) is not None and ecart(t["echeance_prevue"],t["echeance_reelle"])>=4]
     en_c =[t for t in taches if not t["echeance_reelle"] and t["echeance_prevue"]<str(date.today()) and t["statut"] not in ("VALIDE",)]
     rows="".join(f"""<tr>
-      <td class="fw sm">{t['libelle']}</td>
-      <td class="mu sm">{t['at_']}</td>
-      <td class="mu sm">{t['svc']}</td>
-      <td>{t['ap']} {t['an']}</td>
-      <td>{t['echeance_prevue']}</td>
-      <td>{t['echeance_reelle'] or '—'}</td>
-      <td>
-        {f'<span style="color:var(--er);font-weight:500">+{ecart(t["echeance_prevue"],t["echeance_reelle"])}j</span>' if t["echeance_reelle"] and ecart(t["echeance_prevue"],t["echeance_reelle"])>0
-         else ('<span style="color:var(--ok)">Dans les délais</span>' if t["echeance_reelle"] else '<span style="color:var(--er)">Non livré</span>')}
-      </td>
+      <td class="fw sm">{t['libelle']}</td><td class="mu sm">{t['at_']}</td>
+      <td class="mu sm">{t['svc']}</td><td>{t['ap']} {t['an']}</td>
+      <td>{t['echeance_prevue']}</td><td>{t['echeance_reelle'] or '—'}</td>
+      <td>{f'<span style="color:var(--er);font-weight:500">+{ecart(t["echeance_prevue"],t["echeance_reelle"])}j</span>' if t["echeance_reelle"] and ecart(t["echeance_prevue"],t["echeance_reelle"]) and ecart(t["echeance_prevue"],t["echeance_reelle"])>0 else ('<span style="color:var(--ok)">Dans les délais</span>' if t["echeance_reelle"] else '<span style="color:var(--er)">Non livré</span>')}</td>
       <td><span class="bg-badge {badge(t['statut'])[0]}">{badge(t['statut'])[1]}</span></td>
     </tr>""" for t in taches)
     total=max(len(taches),1)
@@ -1034,32 +988,22 @@ def ecarts_view():
     <div class="top"><div class="ph">Mesure des écarts de délais</div></div>
     <div class="ct">
       <div class="g4" style="margin-bottom:16px">
-        <div class="kp"><div class="kl">Dans les délais</div>
-          <div class="kv" style="color:var(--ok)">{len(dans)}</div>
-          <div class="ks">{round(100*len(dans)/total)}%</div></div>
-        <div class="kp"><div class="kl">Léger retard (&lt;4j)</div>
-          <div class="kv" style="color:var(--wn)">{len(leger)}</div>
-          <div class="ks">{round(100*len(leger)/total)}%</div></div>
-        <div class="kp"><div class="kl">Retard critique (&ge;4j)</div>
-          <div class="kv" style="color:var(--er)">{len(crit)}</div>
-          <div class="ks">{round(100*len(crit)/total)}%</div></div>
-        <div class="kp"><div class="kl">Non livrés en retard</div>
-          <div class="kv" style="color:var(--er)">{len(en_c)}</div>
-          <div class="ks">{round(100*len(en_c)/total)}%</div></div>
+        <div class="kp"><div class="kl">Dans les délais</div><div class="kv" style="color:var(--ok)">{len(dans)}</div><div class="ks">{round(100*len(dans)/total)}%</div></div>
+        <div class="kp"><div class="kl">Léger retard (&lt;4j)</div><div class="kv" style="color:var(--wn)">{len(leger)}</div><div class="ks">{round(100*len(leger)/total)}%</div></div>
+        <div class="kp"><div class="kl">Retard critique (&ge;4j)</div><div class="kv" style="color:var(--er)">{len(crit)}</div><div class="ks">{round(100*len(crit)/total)}%</div></div>
+        <div class="kp"><div class="kl">Non livrés en retard</div><div class="kv" style="color:var(--er)">{len(en_c)}</div><div class="ks">{round(100*len(en_c)/total)}%</div></div>
       </div>
       <div class="card">
         <table class="tbl">
-          <thead><tr><th>Tâche</th><th>Activité</th><th>Service</th><th>Agent</th>
-            <th>Prévu</th><th>Réel</th><th>Écart</th><th>Statut</th></tr></thead>
+          <thead><tr><th>Tâche</th><th>Activité</th><th>Service</th><th>Agent</th><th>Prévu</th><th>Réel</th><th>Écart</th><th>Statut</th></tr></thead>
           <tbody>{rows or '<tr><td colspan="8" style="text-align:center;color:var(--mu);padding:18px">Aucune donnée.</td></tr>'}</tbody>
         </table>
       </div>
     </div>"""
     return render("Écarts délais",body,active="ec")
 
-
 # ─────────────────────────────────────────
-# KPIs GLOBAUX (Directeur + DG)
+# KPIs GLOBAUX
 # ─────────────────────────────────────────
 @app.route("/kpi")
 @login_required
@@ -1077,19 +1021,16 @@ def kpi_global():
         dom=max(type_counts,key=type_counts.get) if type_counts else "—"
         svc_data.append({"svc":s,"nb":nb,"val":val,"ret":ret,"pct":pct,"dom":dom})
         rows+=f"""<tr>
-          <td class="fw sm">{s['libelle']}</td>
-          <td>{nb}</td>
+          <td class="fw sm">{s['libelle']}</td><td>{nb}</td>
           <td><div class="fx ai gp2"><div class="bw2" style="width:80px"><div class="bf" style="width:{pct}%;background:var(--brand)"></div></div><span class="mu sm">{pct}%</span></div></td>
           <td style="color:var(--er)">{ret}</td>
           <td><span class="pill" style="background:#EFF6FF;color:#1E40AF">{dom}</span></td>
         </tr>"""
-
     total_acts=sum(x["nb"] for x in svc_data)
     total_val=sum(x["val"] for x in svc_data)
     total_ret=sum(x["ret"] for x in svc_data)
-    pct_global=round(100*total_val/max(sum(db.execute("SELECT COUNT(*) FROM tache").fetchone()[0] for _ in [1]),1))
 
-   all_agents=db.execute("""
+    all_agents=db.execute("""
         SELECT u.nom,u.prenom,u.role,
                COUNT(t.id_tache) AS total,
                SUM(CASE WHEN t.statut='VALIDE' THEN 1 ELSE 0 END) AS val,
@@ -1129,17 +1070,13 @@ def kpi_global():
             <tbody>{rows or '<tr><td colspan="5" style="text-align:center;color:var(--mu);padding:18px">Aucun service.</td></tr>'}</tbody>
           </table>
         </div>
-        <div class="card">
-          <div class="ch">Top intervenants</div>
-          {agent_rows or '<div class="mu sm">Aucune donnée.</div>'}
-        </div>
+        <div class="card"><div class="ch">Top intervenants</div>{agent_rows or '<div class="mu sm">Aucune donnée.</div>'}</div>
       </div>
     </div>"""
     return render("KPIs globaux",body,active="kpi")
 
-
 # ─────────────────────────────────────────
-# AVIS & SIGNALEMENTS (Chef de service +)
+# AVIS & SIGNALEMENTS
 # ─────────────────────────────────────────
 @app.route("/avis", methods=["GET","POST"])
 @login_required
@@ -1160,9 +1097,7 @@ def avis_view():
         ORDER BY av.date_soumission DESC
     """).fetchall()
     db.close()
-    type_color={"SIGNALEMENT":"al-er","FONCTIONNALITE":"al-in","SUGGESTION":"al-wn"}
-    cards="".join(f"""
-    <div class="card" style="margin-bottom:12px">
+    cards="".join(f"""<div class="card" style="margin-bottom:12px">
       <div class="fx ai jb" style="margin-bottom:8px">
         <div class="fx ai gp2">
           <span class="pill {'bok' if a['type']=='FONCTIONNALITE' else ('ber' if a['type']=='SIGNALEMENT' else '')}" style="font-size:11px">{a['type'].replace('_',' ')}</span>
@@ -1173,16 +1108,8 @@ def avis_view():
       <div class="sm" style="margin-bottom:10px">{a['contenu']}</div>
       <div class="fx ai gp2">
         <span class="bg-badge {'bv' if a['statut']=='TRAITE' else 'bw'}">{a['statut']}</span>
-        {f'''<form method="POST" style="display:inline">
-          <input type="hidden" name="id_avis" value="{a['id_avis']}">
-          <input type="hidden" name="statut" value="EN_TRAITEMENT">
-          <button class="btn bg bsm">Prendre en charge</button>
-        </form>
-        <form method="POST" style="display:inline">
-          <input type="hidden" name="id_avis" value="{a['id_avis']}">
-          <input type="hidden" name="statut" value="TRAITE">
-          <button class="btn bok bsm">Marquer traité</button>
-        </form>''' if a['statut']!='TRAITE' else ''}
+        {f'''<form method="POST" style="display:inline"><input type="hidden" name="id_avis" value="{a['id_avis']}"><input type="hidden" name="statut" value="EN_TRAITEMENT"><button class="btn bg bsm">Prendre en charge</button></form>
+        <form method="POST" style="display:inline"><input type="hidden" name="id_avis" value="{a['id_avis']}"><input type="hidden" name="statut" value="TRAITE"><button class="btn bok bsm">Marquer traité</button></form>''' if a['statut']!='TRAITE' else ''}
       </div>
     </div>""" for a in avis)
     body=f"""
@@ -1191,7 +1118,6 @@ def avis_view():
     </div>
     <div class="ct"><div style="max-width:640px">{cards or '<div class="card mu sm">Aucun avis.</div>'}</div></div>"""
     return render("Avis & signalements",body,active="av")
-
 
 # ─────────────────────────────────────────
 # BOÎTE À IDÉES
@@ -1206,8 +1132,7 @@ def idees_view():
         ORDER BY i.nb_votes DESC,i.date_soumission DESC
     """).fetchall()
     db.close()
-    cards="".join(f"""
-    <div class="card" style="margin-bottom:12px">
+    cards="".join(f"""<div class="card" style="margin-bottom:12px">
       <div class="fx ai jb" style="margin-bottom:6px">
         <div class="fw sm">{i['titre']}</div>
         <div class="fx ai gp2">
@@ -1233,9 +1158,10 @@ def idees_view():
 @app.route("/idees/<int:iid>/vote",methods=["POST"])
 @login_required
 def voter_idee(iid):
-    db=get_db(); db.execute("UPDATE idee SET nb_votes=nb_votes+1 WHERE id_idee=?",(iid,)); db.commit(); db.close()
+    db=get_db()
+    db.execute("UPDATE idee SET nb_votes=nb_votes+1 WHERE id_idee=?",(iid,))
+    db.commit(); db.close()
     return redirect(url_for("idees_view"))
-
 
 # ─────────────────────────────────────────
 # NOTIFICATIONS
@@ -1245,13 +1171,12 @@ def voter_idee(iid):
 def notifs_view():
     uid=session["user_id"]; db=get_db()
     notifs=db.execute("SELECT * FROM notification WHERE id_destinataire=? ORDER BY date_envoi DESC LIMIT 60",(uid,)).fetchall()
-    db.execute("UPDATE notification SET lue=1 WHERE id_destinataire=?",(uid,)); db.commit(); db.close()
+    db.execute("UPDATE notification SET lue=1 WHERE id_destinataire=?",(uid,))
+    db.commit(); db.close()
     tc={"ASSIGNATION":"#EFF6FF:#1E40AF","VALIDATION":"#F0FDF4:#166534","REJET":"#FEF2F2:#991B1B","RETARD":"#FFF7ED:#92400E","INFO":"#F8FAFC:#475569","SIGNALEMENT":"#FEF2F2:#991B1B"}
-    rows="".join(f"""
-    <div style="padding:10px 0;border-top:1px solid var(--bd);display:flex;gap:10px;align-items:flex-start">
+    rows="".join(f"""<div style="padding:10px 0;border-top:1px solid var(--bd);display:flex;gap:10px;align-items:flex-start">
       <span class="pill" style="background:{tc.get(n['type'],'#F8FAFC:#475569').split(':')[0]};color:{tc.get(n['type'],'#F8FAFC:#475569').split(':')[1]};flex-shrink:0">{n['type']}</span>
-      <div style="flex:1"><div class="sm">{n['message']}</div>
-        <div class="mu" style="font-size:11px">{n['date_envoi'][:16]}</div></div>
+      <div style="flex:1"><div class="sm">{n['message']}</div><div class="mu" style="font-size:11px">{n['date_envoi'][:16]}</div></div>
       {'<span style="width:6px;height:6px;border-radius:50%;background:var(--in);flex-shrink:0;margin-top:6px"></span>' if not n['lue'] else ''}
     </div>""" for n in notifs)
     body=f"""
@@ -1259,4 +1184,6 @@ def notifs_view():
     <div class="ct"><div class="card">{rows or '<div class="mu sm">Aucune notification.</div>'}</div></div>"""
     return render("Notifications",body,active="nt")
 
-
+if __name__ == "__main__":
+    init_db()
+    app.run(debug=True)
